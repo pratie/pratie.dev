@@ -1,0 +1,21 @@
+---
+import Base from '../../layouts/Base.astro';
+import NoteList from '../../components/NoteList.astro';
+import { allNotes } from '../../lib/notes';
+
+const notes = await allNotes();
+---
+
+<Base title="Notes" description="Notes on how language models work, written to be understood rather than skimmed.">
+  <section class="hello col">
+    <h1>Notes</h1>
+    <p class="lede">
+      How language models work, one piece at a time. They are in reading order, and each note says what to read
+      before it.
+    </p>
+  </section>
+
+  <section class="home-section">
+    <NoteList notes={notes} />
+  </section>
+</Base>

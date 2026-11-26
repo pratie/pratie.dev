@@ -1,0 +1,148 @@
+---
+// Layer norm on one vector: subtract the mean, divide by the spread, then apply the learned gain and bias.
+import Figure from './Figure.astro';
+
+const start = [6.2, -1.4, 9.8, 3.1, 0.4, 12.5, -3.0, 5.6];
+const uid = crypto.randomUUID().slice(0, 8);
+---
+
+<Figure interactive>
+  <fig-norm data-start={JSON.stringify(start)}>
+    <div class="sheet">
+      <p class="fig-label">One token's vector, as it arrives</p>
+      <div class="vec" data-before>{start.map(() => <span class="cell" />)}</div>
+      <p class="fig-label stat" data-before-stat></p>
+
+      <p class="fig-label gap">After layer norm</p>
+      <div class="vec" data-after>{start.map(() => <span class="cell" />)}</div>
+      <p class="fig-label stat" data-after-stat aria-live="polite"></p>
+    </div>
+
+    <div class="knobs">
+      <div class="slider">
+        <label for={`gain-${uid}`}>Gain</label>
+        <input id={`gain-${uid}`} type="range" min="0.25" max="2" step="0.05" value="1" data-gain />
+        <output for={`gain-${uid}`} data-gain-out>1.00</output>
+      </div>
+      <div class="slider">
+        <label for={`bias-${uid}`}>Bias</label>
+        <input id={`bias-${uid}`} type="range" min="-1" max="1" step="0.05" value="0" data-bias />
+        <output for={`bias-${uid}`} data-bias-out>0.00</output>
+      </div>
+    </div>
+
+    <div class="fig-controls">
+      <button class="btn primary" type="button" data-new>New vector</button>
+      <button class="btn" type="button" data-reset>Reset gain and bias</button>
+    </div>
+  </fig-norm>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-norm {
+    display: block;
+  }
+
+  fig-norm > * + * {
+    margin-top: 1rem;
+  }
+
+  .vec {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 2px;
+    margin-block: 0.4rem;
+  }
+
+  .cell {
+    box-shadow: inset 0 0 0 1px var(--rule);
+    font-size: 0.8125rem;
+  }
+
+  @media (max-width: 34rem) {
+    .vec {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .stat {
+    color: var(--ink);
+  }
+
+  .gap {
+    margin-top: 1rem;
+  }
+
+  .knobs {
+    display: grid;
+    gap: 0.25rem;
+  }
+</style>
+
+<script>
+  import { num } from '../../lib/fig';
+
+  const EPS = 1e-5;
+  const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+  const variance = (v: number[]) => {
+    const m = mean(v);
+    return mean(v.map((x) => (x - m) ** 2));
+  };
+
+  class FigNorm extends HTMLElement {
+    vector: number[] = [];
+
+    connectedCallback() {
+      this.vector = JSON.parse(this.dataset.start ?? '[]');
+      const gain = this.part('gain');
+      const bias = this.part('bias');
+      gain.addEventListener('input', () => this.draw());
+      bias.addEventListener('input', () => this.draw());
+      this.querySelector('[data-new]')!.addEventListener('click', () => {
+        // a fresh vector with its own centre and its own spread
+        const centre = (Math.random() - 0.4) * 14;
+        const spread = 0.4 + Math.random() * 6;
+        this.vector = this.vector.map(() => centre + (Math.random() + Math.random() + Math.random() - 1.5) * spread * 1.6);
+        this.draw();
+      });
+      this.querySelector('[data-reset]')!.addEventListener('click', () => {
+        gain.value = '1';
+        bias.value = '0';
+        this.draw();
+      });
+      this.draw();
+    }
+
+    part(name: string) {
+      return this.querySelector<HTMLInputElement>(`[data-${name}]`)!;
+    }
+
+    fill(name: string, values: number[], peak: number) {
+      this.querySelectorAll<HTMLElement>(`[data-${name}] .cell`).forEach((cell, i) => {
+        cell.textContent = num(values[i], Math.abs(values[i]) >= 10 ? 1 : 2);
+        cell.classList.toggle('neg', values[i] < 0);
+        cell.style.setProperty('--heat', String(Math.min(1, Math.abs(values[i]) / peak)));
+      });
+    }
+
+    draw() {
+      const gain = Number(this.part('gain').value);
+      const bias = Number(this.part('bias').value);
+      this.part('gain-out').textContent = gain.toFixed(2);
+      this.part('bias-out').textContent = num(bias, 2);
+
+      const x = this.vector;
+      const m = mean(x);
+      const v = variance(x);
+      const y = x.map((value) => (gain * (value - m)) / Math.sqrt(v + EPS) + bias);
+
+      this.fill('before', x, Math.max(...x.map(Math.abs)));
+      this.fill('after', y, 2.5);
+      this.part('before-stat').textContent = `mean ${num(m, 2)}, standard deviation ${num(Math.sqrt(v), 2)}`;
+      this.part('after-stat').textContent = `mean ${num(mean(y), 2)}, standard deviation ${num(Math.sqrt(variance(y)), 2)}`;
+    }
+  }
+
+  customElements.define('fig-norm', FigNorm);
+</script>

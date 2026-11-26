@@ -1,0 +1,131 @@
+---
+// Two attention heads on the toy sentence, each in its own slice of the dimensions, then put back together.
+import Figure from './Figure.astro';
+import Cells from './Cells.astro';
+import { TOKENS, DIMS, heads } from '../../lib/toy';
+import { num } from '../../lib/fig';
+
+const [one, two] = heads();
+const panels = [
+  { title: 'Head one asks: who is doing this?', dims: DIMS.slice(0, 2), head: one },
+  { title: 'Head two asks: what happens then?', dims: DIMS.slice(2, 4), head: two },
+];
+const joined = TOKENS.map((_, i) => [...one.out[i], ...two.out[i]]);
+---
+
+<Figure wide>
+  <div class="heads">
+    {
+      panels.map((panel) => (
+        <div class="sheet">
+          <p class="fig-label">{panel.title}</p>
+          <div class="matrix">
+            <span class="head" />
+            {TOKENS.map((t) => (
+              <span class="dim">{t}</span>
+            ))}
+            {TOKENS.map((t, i) => (
+              <>
+                <span class="head">{t}</span>
+                {panel.head.weights[i].map((w, j) =>
+                  j > i ? (
+                    <span class="cell off" />
+                  ) : (
+                    <span class="cell" style={`--heat:${w.toFixed(3)}`}>
+                      {num(w, 2).replace(/^0\./, '.')}
+                    </span>
+                  ),
+                )}
+              </>
+            ))}
+          </div>
+          <p class="fig-label">Works in the two dimensions {panel.dims.join(' and ')}.</p>
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="sheet">
+    <p class="fig-label">Both outputs side by side: five tokens, four numbers each, the same shape that went in</p>
+    <div class="joined">
+      <span class="head" />
+      <span class="dim span">from head one</span>
+      <span class="dim span">from head two</span>
+      {
+        TOKENS.map((t, i) => (
+          <>
+            <span class="head">{t}</span>
+            <span class="wide-cells">
+              <Cells values={joined[i]} />
+            </span>
+          </>
+        ))
+      }
+    </div>
+  </div>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .heads {
+    display: grid;
+    gap: 1rem;
+  }
+
+  @media (min-width: 46rem) {
+    .heads {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .matrix {
+    display: grid;
+    grid-template-columns: 3.4rem repeat(5, minmax(0, 1fr));
+    gap: 2px 3px;
+    align-items: center;
+    margin-block: 0.75rem;
+  }
+
+  .joined {
+    display: grid;
+    grid-template-columns: 3.4rem 1fr 1fr;
+    gap: 2px 3px;
+    align-items: center;
+    margin-top: 0.75rem;
+    max-width: 26rem;
+  }
+
+  .wide-cells {
+    grid-column: 2 / 4;
+  }
+
+  .head,
+  .dim {
+    color: var(--ink-2);
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+
+  .dim {
+    text-align: center;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  @media (max-width: 34rem) {
+    .dim {
+      font-size: 0.6875rem;
+    }
+
+    .cell,
+    .joined :global(.cell) {
+      font-size: 0.75rem;
+    }
+  }
+
+  .cell {
+    box-shadow: inset 0 0 0 1px var(--rule);
+    font-size: 0.8125rem;
+    min-height: 1.95em;
+  }
+</style>

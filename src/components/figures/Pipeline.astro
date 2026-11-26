@@ -1,0 +1,74 @@
+---
+// A strip of stages with arrows between them. Stages can link to the section that explains them.
+interface Step {
+  label: string;
+  href?: string;
+  sub?: string;
+}
+
+interface Props {
+  steps: Step[];
+  label?: string;
+}
+
+const { steps, label = 'Stages' } = Astro.props;
+---
+
+<ol class="pipe" aria-label={label}>
+  {
+    steps.map((step, i) => (
+      <li>
+        {i > 0 && (
+          <svg class="arrow" viewBox="0 0 20 10" width="20" height="10" aria-hidden="true">
+            <path d="M0 5h18M14 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.25" />
+          </svg>
+        )}
+        <span class="stage">
+          {step.href ? <a href={step.href}>{step.label}</a> : <span>{step.label}</span>}
+          {step.sub && <small>{step.sub}</small>}
+        </span>
+      </li>
+    ))
+  }
+</ol>
+
+<style>
+  .pipe {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.6rem 0;
+    margin-block: 1.6rem;
+    padding: 0;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+
+  .pipe li {
+    display: flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  .arrow {
+    flex: none;
+    margin-inline: 0.35rem;
+    color: var(--ink-2);
+  }
+
+  .stage {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--field);
+  }
+
+  small {
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+</style>

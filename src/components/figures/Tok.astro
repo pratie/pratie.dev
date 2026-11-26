@@ -1,0 +1,14 @@
+---
+import { tokenParts } from '../../lib/fig';
+
+interface Props {
+  t: string;
+  /** colour index, cycles through the five highlighters; omit for an outline chip */
+  c?: number;
+}
+
+const { t, c } = Astro.props;
+const { lead, body } = tokenParts(t);
+---
+
+<span class:list={['tok', c === undefined ? 'bare' : `c${c % 5}`]}>{lead && <span class="sp">·</span>}{body}</span>

@@ -1,0 +1,50 @@
+---
+// The made-up embeddings the from-scratch note computes with.
+import Figure from './Figure.astro';
+import Cells from './Cells.astro';
+import { TOKENS, DIMS, X } from '../../lib/toy';
+---
+
+<Figure>
+  <div class="sheet">
+    <div class="table">
+      <span class="head"></span>
+      {DIMS.map((d) => <span class="dim">{d}</span>)}
+      {
+        TOKENS.map((t, i) => (
+          <>
+            <span class="head">{t}</span>
+            <span class="row">
+              <Cells values={X[i]} digits={1} />
+            </span>
+          </>
+        ))
+      }
+    </div>
+  </div>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .table {
+    display: grid;
+    grid-template-columns: 3.6rem repeat(4, minmax(0, 1fr));
+    gap: 3px;
+    align-items: center;
+    max-width: 22rem;
+  }
+
+  .row {
+    grid-column: 2 / 6;
+  }
+
+  .head,
+  .dim {
+    color: var(--ink-2);
+    font-size: 0.8125rem;
+  }
+
+  .dim {
+    text-align: center;
+  }
+</style>

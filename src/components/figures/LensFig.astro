@@ -1,0 +1,132 @@
+---
+// The "logit lens": decode the last position after every block and see what the model would say.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+import rows from '../../data/gpt2/lens.json';
+import { pct } from '../../lib/fig';
+
+const scale = Math.max(...rows.flatMap((r) => [r.watch.Paris, r.watch.London]));
+---
+
+<Figure>
+  <table class="lens">
+    <thead>
+      <tr>
+        <th scope="col">After block</th>
+        <th scope="col">Top guess</th>
+        <th scope="col">Paris</th>
+        <th scope="col">London</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((r) => (
+          <tr>
+            <th scope="row">{r.block}</th>
+            <td>
+              <Tok t={String(r.top[0][0])} /> <span class="p">{pct(Number(r.top[0][1]))}</span>
+            </td>
+            <td>
+              <span class="mini">
+                <span class="bar-track">
+                  <span class="bar-fill pen" style={`--p:${r.watch.Paris / scale}`} />
+                </span>
+                <span class="p">{pct(r.watch.Paris)}</span>
+              </span>
+            </td>
+            <td>
+              <span class="mini">
+                <span class="bar-track">
+                  <span class="bar-fill" style={`--p:${r.watch.London / scale}`} />
+                </span>
+                <span class="p">{pct(r.watch.London)}</span>
+              </span>
+            </td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .lens {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--paper);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px var(--rule);
+  }
+
+  .lens th,
+  .lens td {
+    padding: 0.32rem 0.6rem;
+    text-align: left;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+
+  .lens thead th {
+    padding-block: 0.55rem;
+    color: var(--ink-2);
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .lens tbody th {
+    width: 4.5rem;
+    color: var(--ink-2);
+  }
+
+  .lens tbody tr:last-child :is(th, td) {
+    padding-bottom: 0.6rem;
+  }
+
+  .lens td:nth-child(3),
+  .lens td:nth-child(4) {
+    width: 28%;
+  }
+
+  .mini {
+    display: grid;
+    grid-template-columns: 1fr 2.9rem;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .p {
+    color: var(--ink-2);
+    font-size: 0.8125rem;
+    text-align: right;
+  }
+
+  @media (max-width: 34rem) {
+    .lens th,
+    .lens td {
+      padding-inline: 0.35rem;
+    }
+
+    .lens thead th:first-child {
+      font-size: 0;
+    }
+
+    .lens thead th:first-child::after {
+      content: 'Block';
+      font-size: 0.8125rem;
+    }
+
+    .lens tbody th {
+      width: 2.6rem;
+    }
+
+    .mini {
+      grid-template-columns: 1fr;
+      gap: 0.1rem;
+    }
+
+    .mini .p {
+      text-align: left;
+    }
+  }
+</style>

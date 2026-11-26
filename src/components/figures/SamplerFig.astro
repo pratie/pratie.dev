@@ -1,0 +1,251 @@
+---
+// Real GPT-2 logits for three contexts, re-temperatured and truncated live in the browser.
+import Figure from './Figure.astro';
+import data from '../../data/gpt2/sampler.json';
+
+const uid = crypto.randomUUID().slice(0, 8);
+---
+
+<Figure interactive>
+  <fig-sampler data-contexts={JSON.stringify(data)}>
+    <div class="fig-controls" role="group" aria-label="The text so far">
+      {
+        data.map((ctx, i) => (
+          <button class="btn" type="button" data-ctx={i} aria-pressed={i === 0 ? 'true' : 'false'}>
+            {ctx.text} …
+          </button>
+        ))
+      }
+    </div>
+
+    <div class="knobs">
+      <div class="slider">
+        <label for={`temp-${uid}`}>Temperature</label>
+        <input id={`temp-${uid}`} type="range" min="0.1" max="2" step="0.05" value="1" data-temp />
+        <output for={`temp-${uid}`} data-temp-out>1.00</output>
+      </div>
+      <div class="slider">
+        <label for={`topp-${uid}`}>Top-p</label>
+        <input id={`topp-${uid}`} type="range" min="0.05" max="1" step="0.05" value="1" data-topp />
+        <output for={`topp-${uid}`} data-topp-out>1.00</output>
+      </div>
+    </div>
+
+    <div class="bars" data-bars></div>
+    <p class="fig-label stats" data-stats aria-live="polite"></p>
+
+    <div class="sheet draws">
+      <div class="fig-row">
+        <p class="fig-label">Twenty draws from this distribution</p>
+        <button class="btn primary" type="button" data-draw>Draw 20</button>
+      </div>
+      <div class="toks" data-draws></div>
+    </div>
+  </fig-sampler>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-sampler {
+    display: block;
+  }
+
+  fig-sampler > * + * {
+    margin-top: 1rem;
+  }
+
+  .fig-controls .btn {
+    text-align: left;
+  }
+
+  .knobs {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .bars {
+    min-height: 15.5rem;
+  }
+
+  .bars :global(.bar-row.rest) {
+    margin-top: 0.25rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed var(--rule);
+  }
+
+  .bars :global(.bar-row.cut) {
+    color: var(--ink-2);
+  }
+
+  .bars :global(.bar-row.cut .tok) {
+    text-decoration: line-through;
+  }
+
+  .stats {
+    min-height: 3em;
+  }
+
+  .draws .toks {
+    margin-top: 0.75rem;
+    min-height: 3.6rem;
+    align-content: flex-start;
+  }
+
+  .draws :global(.tok) {
+    animation: drop 0.35s var(--ease) backwards;
+    animation-delay: calc(var(--n) * 28ms);
+  }
+
+  @keyframes drop {
+    from {
+      opacity: 0;
+      translate: 0 -0.35rem;
+    }
+  }
+</style>
+
+<script>
+  import { h, tok, pct } from '../../lib/fig';
+
+  interface Context {
+    text: string;
+    top: [string, number][];
+    rest: { lo: number; step: number; counts: number[] };
+  }
+  /** One named token, or a bin of `n` unnamed tokens that share (almost) the same logit. */
+  interface Group {
+    name: string | null;
+    z: number;
+    n: number;
+  }
+  interface Kept extends Group {
+    /** how many tokens of this group survive top-p */
+    keep: number;
+    /** probability of each surviving token, after renormalising */
+    p: number;
+  }
+
+  function groupsOf(ctx: Context): Group[] {
+    const named = ctx.top.map(([name, z]) => ({ name, z, n: 1 }));
+    const bins = ctx.rest.counts
+      .map((n, b) => ({ name: null, z: ctx.rest.lo + (b + 0.5) * ctx.rest.step, n }))
+      .filter((g) => g.n > 0)
+      .reverse();
+    return [...named, ...bins]; // highest logit first
+  }
+
+  function distribution(groups: Group[], temperature: number, topP: number): Kept[] {
+    const max = groups[0].z;
+    const weight = groups.map((g) => Math.exp((g.z - max) / temperature));
+    const total = groups.reduce((sum, g, i) => sum + g.n * weight[i], 0);
+
+    // nucleus: walk down from the most likely token until the kept mass reaches top-p
+    let mass = 0;
+    const keep = groups.map((g, i) => {
+      if (topP >= 1) {
+        mass += (g.n * weight[i]) / total;
+        return g.n;
+      }
+      if (mass >= topP - 1e-9) return 0;
+      const each = weight[i] / total;
+      const count = Math.min(g.n, Math.ceil((topP - mass) / each - 1e-9));
+      mass += count * each;
+      return count;
+    });
+    return groups.map((g, i) => ({ ...g, keep: keep[i], p: keep[i] > 0 ? weight[i] / total / mass : 0 }));
+  }
+
+  class FigSampler extends HTMLElement {
+    contexts: Context[] = [];
+    groups: Group[][] = [];
+    ctx = 0;
+    current: Kept[] = [];
+
+    connectedCallback() {
+      this.contexts = JSON.parse(this.dataset.contexts ?? '[]');
+      this.groups = this.contexts.map(groupsOf);
+
+      this.querySelectorAll<HTMLButtonElement>('[data-ctx]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.ctx = Number(button.dataset.ctx);
+          this.querySelectorAll('[data-ctx]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+          this.draw();
+          this.sample();
+        }),
+      );
+      this.part('temp').addEventListener('input', () => this.draw());
+      this.part('topp').addEventListener('input', () => this.draw());
+      this.part('draw').addEventListener('click', () => this.sample());
+
+      // build the rows once so the bars can animate between states
+      this.part('bars').replaceChildren(
+        ...Array.from({ length: 11 }, (_, i) =>
+          h(
+            'div',
+            { class: i === 10 ? 'bar-row rest' : 'bar-row' },
+            h('span', { class: 'name' }),
+            h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill' })),
+            h('span', { class: 'pct' }),
+          ),
+        ),
+      );
+      this.draw();
+      this.sample();
+    }
+
+    part<T extends HTMLElement = HTMLInputElement>(name: string) {
+      return this.querySelector<T>(`[data-${name}]`)!;
+    }
+
+    draw() {
+      const temperature = Number(this.part('temp').value);
+      const topP = Number(this.part('topp').value);
+      this.part('temp-out').textContent = temperature.toFixed(2);
+      this.part('topp-out').textContent = topP.toFixed(2);
+
+      const dist = distribution(this.groups[this.ctx], temperature, topP);
+      this.current = dist;
+      const named = dist.slice(0, 10);
+      const others = dist.slice(10);
+      const otherCount = others.reduce((sum, g) => sum + g.n, 0);
+      const otherKept = others.reduce((sum, g) => sum + g.keep, 0);
+      const otherMass = others.reduce((sum, g) => sum + g.keep * g.p, 0);
+
+      const rows = [...this.part<HTMLElement>('bars').children] as HTMLElement[];
+      named.forEach((g, i) => {
+        const [name, track, value] = rows[i].children as unknown as HTMLElement[];
+        name.replaceChildren(tok(g.name!, `c${i % 5}`));
+        (track.firstElementChild as HTMLElement).style.setProperty('--p', String(g.p));
+        value.textContent = pct(g.p);
+        rows[i].classList.toggle('cut', g.keep === 0);
+      });
+      const [name, track, value] = rows[10].children as unknown as HTMLElement[];
+      name.textContent = `${otherCount.toLocaleString('en')} others`;
+      (track.firstElementChild as HTMLElement).style.setProperty('--p', String(otherMass));
+      value.textContent = pct(otherMass);
+      rows[10].classList.toggle('cut', otherKept === 0);
+
+      const inPlay = dist.reduce((sum, g) => sum + g.keep, 0);
+      const entropy = -dist.reduce((sum, g) => sum + (g.keep > 0 ? g.keep * g.p * Math.log(g.p) : 0), 0);
+      const choices = Math.exp(entropy);
+      this.part<HTMLElement>('stats').textContent =
+        `${inPlay.toLocaleString('en')} ${inPlay === 1 ? 'token' : 'tokens'} can be picked. ` +
+        `That is as much choice as a fair pick among ${choices < 10 ? choices.toFixed(1) : Math.round(choices).toLocaleString('en')}.`;
+    }
+
+    sample() {
+      const dist = this.current;
+      const chips = Array.from({ length: 20 }, (_, n) => {
+        let r = Math.random();
+        let i = 0;
+        while (i < dist.length - 1 && (r -= dist[i].keep * dist[i].p) > 0) i++;
+        const chip = dist[i].name === null ? h('span', { class: 'tok bare' }, 'other') : tok(dist[i].name!, `c${i % 5}`);
+        chip.style.setProperty('--n', String(n));
+        return chip;
+      });
+      this.part<HTMLElement>('draws').replaceChildren(...chips);
+    }
+  }
+
+  customElements.define('fig-sampler', FigSampler);
+</script>

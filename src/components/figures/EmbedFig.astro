@@ -1,0 +1,259 @@
+---
+// A 2-D map of real rows from GPT-2's embedding table, with true nearest neighbours.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+import data from '../../data/gpt2/embed.json';
+
+type Point = (typeof data.points)[number];
+
+interface Placed {
+  i: number;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+}
+
+const ROW = 22;
+
+/** Scale the points into a box, then nudge overlapping labels apart. */
+function layout(width: number, height: number, flip: boolean): Placed[] {
+  const padX = 40;
+  const padY = 18;
+  const placed = data.points.map((p: Point, i: number) => {
+    const label = p.t.trim();
+    const [u, v] = flip ? [p.y, p.x] : [p.x, p.y];
+    return {
+      i,
+      label,
+      w: label.length * 7.9 + 12,
+      x: padX + u * (width - 2 * padX),
+      y: padY + v * (height - 2 * padY),
+    };
+  });
+
+  for (let pass = 0; pass < 400; pass++) {
+    let moved = false;
+    for (let a = 0; a < placed.length; a++) {
+      for (let b = a + 1; b < placed.length; b++) {
+        const p = placed[a];
+        const q = placed[b];
+        const overlapX = (p.w + q.w) / 2 + 3 - Math.abs(p.x - q.x);
+        const overlapY = ROW + 1 - Math.abs(p.y - q.y);
+        if (overlapX <= 0 || overlapY <= 0) continue;
+        moved = true;
+        if (overlapX < overlapY) {
+          const shift = ((p.x <= q.x ? -1 : 1) * overlapX) / 2;
+          p.x += shift;
+          q.x -= shift;
+        } else {
+          const shift = ((p.y <= q.y ? -1 : 1) * overlapY) / 2;
+          p.y += shift;
+          q.y -= shift;
+        }
+      }
+    }
+    for (const p of placed) {
+      p.x = Math.min(width - p.w / 2 - 1, Math.max(p.w / 2 + 1, p.x));
+      p.y = Math.min(height - ROW / 2 - 1, Math.max(ROW / 2 + 1, p.y));
+    }
+    if (!moved) break;
+  }
+  return placed;
+}
+
+const maps = [
+  { cls: 'map wide-map', width: 640, height: 400, placed: layout(640, 400, false) },
+  { cls: 'map tall-map', width: 330, height: 640, placed: layout(330, 640, true) },
+];
+
+const start = data.points.findIndex((p: Point) => p.t === ' Paris');
+const near = data.points.map((p: Point) => p.near);
+---
+
+<Figure interactive>
+  <fig-embed data-near={JSON.stringify(near)} data-words={JSON.stringify(data.points.map((p: Point) => p.t))} data-start={start}>
+    {
+      maps.map((m) => (
+        <svg
+          class={m.cls}
+          viewBox={`0 0 ${m.width} ${m.height}`}
+          role="group"
+          aria-label="Map of token embeddings. Arrow keys move between words."
+        >
+          {m.placed.map((p) => (
+            <g
+              class="word"
+              data-i={p.i}
+              tabindex={p.i === start ? 0 : -1}
+              role="button"
+              aria-label={p.label}
+              transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`}
+            >
+              <rect x={(-p.w / 2).toFixed(1)} y={-ROW / 2} width={p.w.toFixed(1)} height={ROW} rx="4" />
+              <text text-anchor="middle" dominant-baseline="central">
+                {p.label}
+              </text>
+            </g>
+          ))}
+        </svg>
+      ))
+    }
+
+    <div class="sheet readout" aria-live="polite">
+      <p class="fig-label">
+        Closest to <span data-word><Tok t={data.points[start].t} c={3} /></span> among all{' '}
+        {data.vocab.toLocaleString('en')} tokens, by cosine similarity in {data.dims} dimensions
+      </p>
+      <p class="toks" data-near-list>
+        {
+          data.points[start].near.map(([t, s]) => (
+            <span class="pair">
+              <Tok t={String(t)} c={0} /> {Number(s).toFixed(2)}
+            </span>
+          ))
+        }
+      </p>
+    </div>
+  </fig-embed>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-embed {
+    display: block;
+  }
+
+  .map {
+    display: block;
+    width: 100%;
+    height: auto;
+    font-size: 13px;
+    overflow: visible;
+  }
+
+  .wide-map {
+    display: none;
+  }
+
+  @media (min-width: 40rem) {
+    .wide-map {
+      display: block;
+    }
+
+    .tall-map {
+      display: none;
+    }
+  }
+
+  .word {
+    cursor: pointer;
+    outline: none;
+  }
+
+  .word rect {
+    fill: var(--paper);
+    stroke: var(--rule);
+    transition:
+      fill 0.2s,
+      stroke 0.2s;
+  }
+
+  .word text {
+    fill: var(--ink);
+  }
+
+  .word:hover rect {
+    stroke: var(--ink-2);
+  }
+
+  .word:focus-visible rect {
+    stroke: var(--pen);
+    stroke-width: 2;
+  }
+
+  .word.is-near rect {
+    fill: var(--mark-wash);
+    stroke: var(--mark);
+  }
+
+  .word.is-on rect {
+    fill: var(--hl-3);
+    stroke: var(--pen);
+    stroke-width: 1.5;
+  }
+
+  .word.is-on text {
+    font-weight: 700;
+  }
+
+  .readout {
+    margin-top: 1rem;
+  }
+
+  .readout .toks {
+    margin: 0.6rem 0 0;
+    gap: 0.4rem 1rem;
+    min-height: 1.6rem;
+  }
+
+  .readout :global(.pair) {
+    white-space: nowrap;
+    color: var(--ink-2);
+  }
+
+  .readout :global(.pair .tok) {
+    color: var(--ink);
+  }
+</style>
+
+<script>
+  import { h, tok } from '../../lib/fig';
+
+  class FigEmbed extends HTMLElement {
+    near: [string, number][][] = [];
+    words: string[] = [];
+
+    connectedCallback() {
+      this.near = JSON.parse(this.dataset.near ?? '[]');
+      this.words = JSON.parse(this.dataset.words ?? '[]');
+
+      this.querySelectorAll<SVGGElement>('.word').forEach((word) => {
+        const i = Number(word.dataset.i);
+        word.addEventListener('click', () => this.select(i));
+        word.addEventListener('focus', () => this.select(i));
+        word.addEventListener('pointerenter', (event) => {
+          if (event.pointerType === 'mouse') this.select(i);
+        });
+        // one tab stop for the whole map; arrow keys walk through the words
+        word.addEventListener('keydown', (event) => {
+          const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+          if (step === undefined) return;
+          event.preventDefault();
+          const next = (i + step + this.words.length) % this.words.length;
+          this.select(next);
+          const svg = word.ownerSVGElement;
+          svg?.querySelector<SVGGElement>(`.word[data-i="${next}"]`)?.focus();
+        });
+      });
+      this.select(Number(this.dataset.start));
+    }
+
+    select(i: number) {
+      const neighbours = new Set(this.near[i].map(([text]) => text));
+      this.querySelectorAll<SVGGElement>('.word').forEach((word) => {
+        const j = Number(word.dataset.i);
+        word.classList.toggle('is-on', j === i);
+        word.classList.toggle('is-near', j !== i && neighbours.has(this.words[j]));
+        word.setAttribute('aria-pressed', String(j === i));
+        word.setAttribute('tabindex', j === i ? '0' : '-1');
+      });
+      this.querySelector('[data-word]')!.replaceChildren(tok(this.words[i], 'c3'));
+      this.querySelector('[data-near-list]')!.replaceChildren(
+        ...this.near[i].map(([text, sim]) => h('span', { class: 'pair' }, tok(text, 'c0'), ` ${sim.toFixed(2)}`)),
+      );
+    }
+  }
+
+  customElements.define('fig-embed', FigEmbed);
+</script>

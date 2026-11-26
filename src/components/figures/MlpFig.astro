@@ -1,0 +1,70 @@
+---
+// One token's trip through the MLP: widen four times, switch off the negatives, narrow back down.
+import Figure from './Figure.astro';
+import Cells from './Cells.astro';
+import { vecMat } from '../../lib/fig';
+import { X } from '../../lib/toy';
+
+// A small deterministic generator, so the made-up weights are the same on every build.
+let seed = 7;
+const rand = () => {
+  seed = (seed * 1664525 + 1013904223) % 4294967296;
+  return seed / 4294967296 - 0.5;
+};
+const matrix = (rows: number, cols: number, size: number) =>
+  Array.from({ length: rows }, () => Array.from({ length: cols }, () => rand() * size));
+
+const input = X[2]; // "sleeps"
+const up = matrix(4, 16, 2.4);
+const down = matrix(16, 4, 1.2);
+const hidden = vecMat(input, up);
+const active = hidden.map((v) => Math.max(0, v));
+const output = vecMat(active, down);
+const zeroed = hidden.filter((v) => v < 0).length;
+---
+
+<Figure>
+  <div class="sheet steps">
+    <p class="fig-label">In: one token's vector, 4 numbers</p>
+    <div class="narrow"><Cells values={input} /></div>
+
+    <p class="fig-label">After the first matrix: 16 numbers</p>
+    <div class="grid16"><Cells values={hidden} max={1.5} /></div>
+
+    <p class="fig-label">After ReLU: the {zeroed} negative ones are now zero</p>
+    <div class="grid16"><Cells values={active} max={1.5} off={hidden.map((v) => v < 0)} /></div>
+
+    <p class="fig-label">After the second matrix: back to 4 numbers</p>
+    <div class="narrow"><Cells values={output} max={1.5} /></div>
+  </div>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .steps {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .steps .fig-label:not(:first-child) {
+    margin-top: 0.7rem;
+  }
+
+  .narrow {
+    max-width: 14rem;
+  }
+
+  .grid16 :global(.cells) {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  @media (max-width: 34rem) {
+    .grid16 :global(.cells) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .steps :global(.cell) {
+    font-size: 0.8125rem;
+  }
+</style>

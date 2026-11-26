@@ -1,0 +1,840 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-26T20:31:58.076Z",
+  "title": "Design System: pratie.dev",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(98.4% 0.007 97)",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#272624",
+          "#464542",
+          "#64635f",
+          "#878682",
+          "#acaba7",
+          "#cececa",
+          "#efeeeb"
+        ]
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Field",
+        "canonical": "oklch(95.7% 0.012 96)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#272622",
+          "#46453f",
+          "#65635c",
+          "#88867e",
+          "#adaba3",
+          "#cfcec7",
+          "#f0eee9"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(23.5% 0.006 92)",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#272624",
+          "#464542",
+          "#646360",
+          "#878682",
+          "#acaba7",
+          "#cfceca",
+          "#efeeec"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Second Ink",
+        "canonical": "oklch(46.4% 0.015 92)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#282621",
+          "#47453e",
+          "#66635a",
+          "#89867c",
+          "#aeaba2",
+          "#d0cec6",
+          "#f0eee8"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "oklch(89.1% 0.018 93)",
+        "tonalRamp": [
+          "#0c0b08",
+          "#282620",
+          "#48453c",
+          "#666358",
+          "#8a867a",
+          "#aeab9f",
+          "#d1cec4",
+          "#f1eee7"
+        ]
+      },
+      "dot": {
+        "role": "neutral",
+        "displayName": "Dot",
+        "canonical": "oklch(85.1% 0.021 92)",
+        "tonalRamp": [
+          "#0c0b07",
+          "#29261f",
+          "#48453b",
+          "#676357",
+          "#8b8678",
+          "#afab9e",
+          "#d1cec2",
+          "#f1eee5"
+        ]
+      },
+      "margin-line": {
+        "role": "neutral",
+        "displayName": "Margin Line",
+        "canonical": "oklch(82.5% 0.063 31)",
+        "tonalRamp": [
+          "#140706",
+          "#381f1a",
+          "#5e3a34",
+          "#82564e",
+          "#a9786f",
+          "#cd9e95",
+          "#ecc3bb",
+          "#fdeae6"
+        ]
+      },
+      "pen": {
+        "role": "primary",
+        "displayName": "Pen Blue",
+        "canonical": "oklch(45.1% 0.211 267)",
+        "tonalRamp": [
+          "#02042d",
+          "#0c1a66",
+          "#1d36a0",
+          "#3253d3",
+          "#5079fe",
+          "#86a7fe",
+          "#b9cdfe",
+          "#e8eefd"
+        ]
+      },
+      "pen-wash": {
+        "role": "primary",
+        "displayName": "Pen Wash",
+        "canonical": "oklch(93.3% 0.026 274)",
+        "tonalRamp": [
+          "#0a0b10",
+          "#24262f",
+          "#414451",
+          "#5f6272",
+          "#818596",
+          "#a6aaba",
+          "#c9cddb",
+          "#ebeef9"
+        ]
+      },
+      "mark": {
+        "role": "secondary",
+        "displayName": "Highlighter Yellow",
+        "canonical": "oklch(92.0% 0.148 98)",
+        "tonalRamp": [
+          "#0f0b00",
+          "#2e2600",
+          "#514500",
+          "#736300",
+          "#9b8604",
+          "#c2ab37",
+          "#e1cf75",
+          "#fef0ac"
+        ]
+      },
+      "mark-wash": {
+        "role": "secondary",
+        "displayName": "Highlighter Wash",
+        "canonical": "oklch(95.8% 0.086 99)",
+        "tonalRamp": [
+          "#0f0b00",
+          "#2d2702",
+          "#4e4512",
+          "#6f6428",
+          "#938748",
+          "#b7ac72",
+          "#d8cf9e",
+          "#f6f0c9"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Red Pencil",
+        "canonical": "oklch(51.1% 0.164 37)",
+        "tonalRamp": [
+          "#1e0100",
+          "#4a0d00",
+          "#7b2102",
+          "#a93815",
+          "#d55a37",
+          "#f98665",
+          "#fdbca9",
+          "#fee9e3"
+        ]
+      },
+      "warn-wash": {
+        "role": "tertiary",
+        "displayName": "Pencil Wash",
+        "canonical": "oklch(93.3% 0.030 44)",
+        "tonalRamp": [
+          "#0f0a07",
+          "#2f241f",
+          "#51413b",
+          "#725e56",
+          "#968178",
+          "#baa69d",
+          "#dbc9c2",
+          "#f9ebe5"
+        ]
+      },
+      "hl-0": {
+        "role": "tertiary",
+        "displayName": "Chip Yellow",
+        "canonical": "oklch(95.0% 0.094 98)",
+        "tonalRamp": [
+          "#0f0b00",
+          "#2e2601",
+          "#504506",
+          "#71631e",
+          "#95873f",
+          "#b9ac6c",
+          "#dacf99",
+          "#f8f0c5"
+        ]
+      },
+      "hl-1": {
+        "role": "tertiary",
+        "displayName": "Chip Green",
+        "canonical": "oklch(92.3% 0.060 133)",
+        "tonalRamp": [
+          "#070d04",
+          "#1f2a17",
+          "#3a4b2f",
+          "#566b49",
+          "#788e69",
+          "#9db390",
+          "#c2d5b6",
+          "#e5f4dc"
+        ]
+      },
+      "hl-2": {
+        "role": "tertiary",
+        "displayName": "Chip Pink",
+        "canonical": "oklch(91.8% 0.045 1)",
+        "tonalRamp": [
+          "#11080b",
+          "#322126",
+          "#563d44",
+          "#785962",
+          "#9e7b84",
+          "#c2a1a9",
+          "#e2c5cc",
+          "#ffe8ed"
+        ]
+      },
+      "hl-3": {
+        "role": "tertiary",
+        "displayName": "Chip Blue",
+        "canonical": "oklch(91.3% 0.036 261)",
+        "tonalRamp": [
+          "#080b11",
+          "#202732",
+          "#3c4555",
+          "#586477",
+          "#7a879c",
+          "#9fabc0",
+          "#c4cee0",
+          "#e7effd"
+        ]
+      },
+      "hl-4": {
+        "role": "tertiary",
+        "displayName": "Chip Orange",
+        "canonical": "oklch(92.4% 0.057 70)",
+        "tonalRamp": [
+          "#110903",
+          "#322312",
+          "#554128",
+          "#775e41",
+          "#9d8160",
+          "#c0a688",
+          "#e1cab0",
+          "#feebd7"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral",
+        "displayName": "Paper (dark theme)",
+        "canonical": "oklch(21.4% 0.004 85)",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#272625",
+          "#464543",
+          "#646361",
+          "#878683",
+          "#acaba8",
+          "#cfcdcb",
+          "#efeeed"
+        ]
+      },
+      "field-dark": {
+        "role": "neutral",
+        "displayName": "Field (dark theme)",
+        "canonical": "oklch(24.8% 0.006 92)",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#272624",
+          "#464542",
+          "#646360",
+          "#878682",
+          "#acaba7",
+          "#cfceca",
+          "#efeeec"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark theme)",
+        "canonical": "oklch(93.1% 0.015 90)",
+        "tonalRamp": [
+          "#0c0b08",
+          "#282621",
+          "#48453e",
+          "#66635a",
+          "#8a867c",
+          "#aeaba1",
+          "#d0cec5",
+          "#f1eee8"
+        ]
+      },
+      "ink-2-dark": {
+        "role": "neutral",
+        "displayName": "Second Ink (dark theme)",
+        "canonical": "oklch(72.2% 0.019 89)",
+        "tonalRamp": [
+          "#0c0b08",
+          "#292620",
+          "#48453c",
+          "#676358",
+          "#8b8679",
+          "#afaa9f",
+          "#d1cdc3",
+          "#f1eee6"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral",
+        "displayName": "Rule (dark theme)",
+        "canonical": "oklch(32.5% 0.011 92)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#282623",
+          "#474540",
+          "#65635d",
+          "#88867f",
+          "#adaba4",
+          "#cfcec8",
+          "#f0eeea"
+        ]
+      },
+      "dot-dark": {
+        "role": "neutral",
+        "displayName": "Dot (dark theme)",
+        "canonical": "oklch(34.9% 0.013 88)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#282622",
+          "#47453f",
+          "#66635c",
+          "#89867e",
+          "#aeaaa3",
+          "#d0cdc7",
+          "#f0eee9"
+        ]
+      },
+      "margin-line-dark": {
+        "role": "neutral",
+        "displayName": "Margin Line (dark theme)",
+        "canonical": "oklch(38.2% 0.053 30)",
+        "tonalRamp": [
+          "#130806",
+          "#35201d",
+          "#5a3c37",
+          "#7d5952",
+          "#a47b73",
+          "#c7a099",
+          "#e7c5be",
+          "#fee9e5"
+        ]
+      },
+      "pen-dark": {
+        "role": "primary",
+        "displayName": "Pen Blue (dark theme)",
+        "canonical": "oklch(78.5% 0.109 274)",
+        "tonalRamp": [
+          "#06091d",
+          "#1c2347",
+          "#374074",
+          "#515e9d",
+          "#7281c7",
+          "#97a6e9",
+          "#bfcbfd",
+          "#eaeefd"
+        ]
+      },
+      "pen-wash-dark": {
+        "role": "primary",
+        "displayName": "Pen Wash (dark theme)",
+        "canonical": "oklch(29.8% 0.051 275)",
+        "tonalRamp": [
+          "#090a14",
+          "#222536",
+          "#3e435c",
+          "#5b617f",
+          "#7d84a5",
+          "#a2a9c9",
+          "#c6cce8",
+          "#eaeefe"
+        ]
+      },
+      "mark-dark": {
+        "role": "secondary",
+        "displayName": "Highlighter Yellow (dark theme)",
+        "canonical": "oklch(77.3% 0.152 93)",
+        "tonalRamp": [
+          "#100a00",
+          "#302500",
+          "#544300",
+          "#766108",
+          "#9f840f",
+          "#c8a82e",
+          "#e7cc71",
+          "#ffeeb6"
+        ]
+      },
+      "mark-wash-dark": {
+        "role": "secondary",
+        "displayName": "Highlighter Wash (dark theme)",
+        "canonical": "oklch(36.9% 0.064 95)",
+        "tonalRamp": [
+          "#0e0b02",
+          "#2c260e",
+          "#4e4523",
+          "#6e633a",
+          "#92865a",
+          "#b6ab82",
+          "#d7ceab",
+          "#f6efd3"
+        ]
+      },
+      "warn-dark": {
+        "role": "tertiary",
+        "displayName": "Red Pencil (dark theme)",
+        "canonical": "oklch(79.2% 0.126 42)",
+        "tonalRamp": [
+          "#1b0300",
+          "#441502",
+          "#712e11",
+          "#9a4827",
+          "#c46a46",
+          "#e79271",
+          "#febca3",
+          "#ffe9e1"
+        ]
+      },
+      "warn-wash-dark": {
+        "role": "tertiary",
+        "displayName": "Pencil Wash (dark theme)",
+        "canonical": "oklch(30.5% 0.056 37)",
+        "tonalRamp": [
+          "#130805",
+          "#36201a",
+          "#5b3c33",
+          "#7e594e",
+          "#a57b6e",
+          "#c8a094",
+          "#e8c5ba",
+          "#ffe9e3"
+        ]
+      },
+      "hl-0-dark": {
+        "role": "tertiary",
+        "displayName": "Chip Yellow (dark theme)",
+        "canonical": "oklch(37.8% 0.063 98)",
+        "tonalRamp": [
+          "#0e0b02",
+          "#2c270e",
+          "#4c4524",
+          "#6c643b",
+          "#90875b",
+          "#b4ac82",
+          "#d6cfab",
+          "#f5efd3"
+        ]
+      },
+      "hl-1-dark": {
+        "role": "tertiary",
+        "displayName": "Chip Green (dark theme)",
+        "canonical": "oklch(34.3% 0.051 149)",
+        "tonalRamp": [
+          "#060d07",
+          "#1b2b1e",
+          "#354b39",
+          "#506b54",
+          "#718f76",
+          "#97b39b",
+          "#bdd5c0",
+          "#e1f4e4"
+        ]
+      },
+      "hl-2-dark": {
+        "role": "tertiary",
+        "displayName": "Chip Pink (dark theme)",
+        "canonical": "oklch(32.3% 0.055 359)",
+        "tonalRamp": [
+          "#12070b",
+          "#341f26",
+          "#593b45",
+          "#7c5763",
+          "#a27985",
+          "#c69eaa",
+          "#e6c3cd",
+          "#fde8ee"
+        ]
+      },
+      "hl-3-dark": {
+        "role": "tertiary",
+        "displayName": "Chip Blue (dark theme)",
+        "canonical": "oklch(33.1% 0.057 263)",
+        "tonalRamp": [
+          "#070b15",
+          "#1d2638",
+          "#38455e",
+          "#536383",
+          "#7486a9",
+          "#9aabcc",
+          "#bfceeb",
+          "#e7effe"
+        ]
+      },
+      "hl-4-dark": {
+        "role": "tertiary",
+        "displayName": "Chip Orange (dark theme)",
+        "canonical": "oklch(34.2% 0.052 68)",
+        "tonalRamp": [
+          "#110a04",
+          "#312315",
+          "#54412c",
+          "#765e45",
+          "#9b8165",
+          "#bfa68c",
+          "#e0cab3",
+          "#fdebd9"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The name on the front page, the notes index title, and (fluidly) a note title."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Second-level headings inside a note; the entries of the contents rail."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Third-level headings inside a note."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Front page introduction and a note standfirst."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose in the 41rem text column."
+      },
+      "body-sm": {
+        "displayName": "Body small",
+        "purpose": "Blurbs, project list, link boxes, header nav, sentences inside figures."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Figure captions and the footer, in second ink."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Margin labels at 60rem and wider."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Default text inside a figure panel; tabular numerals."
+      },
+      "data-sm": {
+        "displayName": "Data small",
+        "purpose": "Figure labels, buttons, dates, code blocks, pipeline stages."
+      },
+      "data-xs": {
+        "displayName": "Data extra small",
+        "purpose": "Axis and column heads, token ids, per-chip weights. The size floor."
+      }
+    },
+    "shadows": [
+      {
+        "name": "hairline-ring",
+        "value": "inset 0 0 0 1px var(--rule)",
+        "purpose": "Edge of a number cell or outline chip, drawn without changing its size. Not elevation."
+      },
+      {
+        "name": "selection-ring",
+        "value": "inset 0 0 0 1px var(--pen), 0 0 0 1px var(--pen)",
+        "purpose": "The chip or cell the reader has selected inside a figure."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The only easing: bar rescale, token landing, chip drop, theme icon turn."
+      },
+      {
+        "name": "control",
+        "value": "0.15s",
+        "purpose": "Button colour change on hover and press."
+      },
+      {
+        "name": "tint",
+        "value": "0.2s to 0.25s",
+        "purpose": "Bar fill colour, cell heat, chip attention tint."
+      },
+      {
+        "name": "bar",
+        "value": "0.4s",
+        "purpose": "A probability bar rescaling; also the theme icon half turn."
+      },
+      {
+        "name": "drop",
+        "value": "0.35s, 28ms stagger",
+        "purpose": "Sampled chips dropping in."
+      },
+      {
+        "name": "land",
+        "value": "0.9s",
+        "purpose": "Highlighter flash fading on a newly generated token."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "All transitions and animations collapse under prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "figure-narrow",
+        "value": "34rem"
+      },
+      {
+        "name": "two-column",
+        "value": "40rem"
+      },
+      {
+        "name": "figure-pair",
+        "value": "46rem"
+      },
+      {
+        "name": "margin",
+        "value": "60rem"
+      },
+      {
+        "name": "bleed",
+        "value": "76rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default control inside a figure panel.",
+      "html": "<button class=\"ds-btn\" type=\"button\">Start over</button>",
+      "css": ".ds-btn { min-height: 2.25rem; padding: 0.5rem 0.8rem; border: 1px solid var(--ink); border-radius: 6px; background: var(--paper); color: var(--ink); font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.2; cursor: pointer; transition: background-color 0.15s, color 0.15s, border-color 0.15s; } .ds-btn:hover { background: var(--pen-wash); } .ds-btn:active { translate: 0 1px; } .ds-btn:focus-visible { outline: 2px solid var(--pen); outline-offset: 3px; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action that advances a figure; also the look of a pressed toggle.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Next token</button>",
+      "css": ".ds-btn-primary { min-height: 2.25rem; padding: 0.5rem 0.8rem; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.2; cursor: pointer; transition: background-color 0.15s, color 0.15s, border-color 0.15s; } .ds-btn-primary:hover { background: var(--pen); border-color: var(--pen); } .ds-btn-primary:active { translate: 0 1px; } .ds-btn-primary:focus-visible { outline: 2px solid var(--pen); outline-offset: 3px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "field-input",
+      "description": "Free text typed into a figure.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Type a sentence\" />",
+      "css": ".ds-input { width: 100%; min-height: 2.5rem; padding: 0.5rem 0.7rem; border: 1px solid var(--ink-2); border-radius: 6px; background: var(--paper); color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem; } .ds-input::placeholder { color: var(--ink-2); } .ds-input:focus-visible { outline: 2px solid var(--pen); outline-offset: 3px; }"
+    },
+    {
+      "name": "Slider",
+      "kind": "input",
+      "refersTo": "field-input",
+      "description": "A labelled range with a mono readout.",
+      "html": "<label class=\"ds-slider\"><span>temperature</span><input type=\"range\" min=\"0\" max=\"2\" step=\"0.1\" value=\"1\" /><output>1.0</output></label>",
+      "css": ".ds-slider { display: grid; grid-template-columns: minmax(5.5rem, auto) minmax(5rem, 1fr) 3.25rem; align-items: center; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.875rem; font-variant-numeric: tabular-nums; color: var(--ink); } .ds-slider input { width: 100%; height: 1.75rem; margin: 0; accent-color: var(--pen); cursor: pointer; } .ds-slider input:focus-visible { outline: 2px solid var(--pen); outline-offset: 3px; border-radius: 2px; } .ds-slider output { text-align: right; }"
+    },
+    {
+      "name": "Header Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Handle at left, two links and the theme toggle at right.",
+      "html": "<header class=\"ds-top\"><a class=\"ds-home\" href=\"#\">pratie</a><nav><a href=\"#\" aria-current=\"page\">notes</a><a href=\"#\">projects</a><button class=\"ds-theme\" type=\"button\" aria-label=\"Dark theme\" aria-pressed=\"false\"><svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"8\" r=\"6.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"></circle><path d=\"M8 1.75a6.25 6.25 0 0 1 0 12.5z\" fill=\"currentColor\"></path></svg></button></nav></header>",
+      "css": ".ds-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-family: var(--font-text); } .ds-home { font-weight: 700; color: var(--ink); text-decoration: none; } .ds-top nav { display: flex; align-items: center; gap: 1.25rem; font-size: 0.9375rem; } .ds-top nav a { color: var(--ink-2); text-decoration: none; padding-block: 0.4rem; } .ds-top nav a:hover, .ds-top nav a[aria-current='page'] { color: var(--ink); text-decoration: underline; text-decoration-color: var(--pen); text-decoration-thickness: 2px; text-underline-offset: 0.2em; } .ds-theme { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); cursor: pointer; } .ds-theme:hover { color: var(--ink); background: var(--field); } .ds-top a:focus-visible, .ds-theme:focus-visible { outline: 2px solid var(--pen); outline-offset: 3px; border-radius: 2px; }"
+    },
+    {
+      "name": "Token Chips",
+      "kind": "chip",
+      "refersTo": "token-chip",
+      "description": "A token is always a chip. Five highlighter grounds cycle by index; the outline chip has no index.",
+      "html": "<span class=\"ds-toks\"><span class=\"ds-tok\">The</span><span class=\"ds-tok ds-c1\"><span class=\"ds-sp\">·</span>cat</span><span class=\"ds-tok ds-c2\"><span class=\"ds-sp\">·</span>sat</span><span class=\"ds-tok ds-c3\"><span class=\"ds-sp\">·</span>on</span><span class=\"ds-tok ds-c4\"><span class=\"ds-sp\">·</span>the</span><span class=\"ds-tok ds-bare\"><span class=\"ds-sp\">·</span>mat</span></span>",
+      "css": ".ds-toks { display: flex; flex-wrap: wrap; gap: 0.3rem 0.2rem; align-items: flex-start; font-size: 0.875rem; color: var(--ink); } .ds-tok { display: inline-block; font-family: var(--font-mono); padding: 0.08em 0.3em; border-radius: 4px; background: var(--hl-0); white-space: pre; line-height: 1.45; } .ds-c1 { background: var(--hl-1); } .ds-c2 { background: var(--hl-2); } .ds-c3 { background: var(--hl-3); } .ds-c4 { background: var(--hl-4); } .ds-bare { background: transparent; box-shadow: inset 0 0 0 1px var(--rule); } .ds-sp { opacity: 0.45; }"
+    },
+    {
+      "name": "Figure Panel with Sheet",
+      "kind": "card",
+      "refersTo": "figure-panel",
+      "description": "Dot-grid panel that holds every figure, with a plain paper sheet inside and the caption below.",
+      "html": "<figure class=\"ds-fig\"><div class=\"ds-panel\"><p class=\"ds-sheet\">The cat sat on the</p><p class=\"ds-fig-label\">GPT-2's guesses for the next token</p></div><figcaption>Real GPT-2 output, not made up.</figcaption></figure>",
+      "css": ".ds-fig { margin: 0; } .ds-panel { padding: 1.5rem; border: 1px solid var(--rule); border-radius: 10px; background-color: var(--field); background-image: radial-gradient(var(--dot) 1px, transparent 1.3px); background-size: 1rem 1rem; background-position: 0.5rem 0.5rem; font-family: var(--font-mono); font-size: 0.875rem; line-height: 1.5; font-variant-numeric: tabular-nums; color: var(--ink); } .ds-panel > * { margin: 0; } .ds-panel > * + * { margin-top: 1rem; } .ds-sheet { padding: 0.75rem 0.85rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font-family: var(--font-text); font-size: 1rem; line-height: 1.7; } .ds-fig-label { color: var(--ink-2); font-size: 0.8125rem; } .ds-fig figcaption { margin-top: 0.7rem; font-family: var(--font-text); font-size: 0.875rem; line-height: 1.55; color: var(--ink-2); }"
+    },
+    {
+      "name": "Probability Bars",
+      "kind": "custom",
+      "refersTo": "bar-fill",
+      "description": "A probability is a horizontal bar on an absolute 0 to 100% scale; the picked row turns pen blue.",
+      "html": "<div class=\"ds-bars\"><div class=\"ds-bar-row ds-picked\"><span class=\"ds-name\">·mat</span><span class=\"ds-track\"><span class=\"ds-fill\" style=\"--p:0.42\"></span></span><span class=\"ds-pct\">42%</span></div><div class=\"ds-bar-row\"><span class=\"ds-name\">·floor</span><span class=\"ds-track\"><span class=\"ds-fill\" style=\"--p:0.18\"></span></span><span class=\"ds-pct\">18%</span></div><div class=\"ds-bar-row\"><span class=\"ds-name\">·bed</span><span class=\"ds-track\"><span class=\"ds-fill\" style=\"--p:0.07\"></span></span><span class=\"ds-pct\">7%</span></div></div>",
+      "css": ".ds-bars { display: grid; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.875rem; font-variant-numeric: tabular-nums; color: var(--ink); } .ds-bar-row { display: grid; grid-template-columns: minmax(5rem, 8rem) 1fr 3.4rem; align-items: center; gap: 0.6rem; } .ds-name { white-space: pre; overflow: hidden; text-overflow: ellipsis; } .ds-track { display: block; height: 0.85rem; border-radius: 2px; background: color-mix(in oklab, var(--ink) 9%, transparent); overflow: hidden; } .ds-fill { display: block; width: 100%; height: 100%; border-radius: 2px; background: var(--ink-2); transform-origin: left center; transform: scaleX(max(var(--p, 0), 0.004)); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s; } .ds-picked .ds-fill { background: var(--pen); } .ds-picked .ds-name, .ds-picked .ds-pct { color: var(--pen); font-weight: 700; } .ds-pct { text-align: right; }"
+    },
+    {
+      "name": "Number Cells",
+      "kind": "custom",
+      "refersTo": "number-cell",
+      "description": "A vector as a row of cells: blue for positive, red for negative, hatched for masked or switched off, ringed when selected.",
+      "html": "<span class=\"ds-cells\"><span class=\"ds-cell\" style=\"--heat:0.9\">0.92</span><span class=\"ds-cell ds-neg\" style=\"--heat:0.55\">-0.55</span><span class=\"ds-cell\" style=\"--heat:0.1\">0.10</span><span class=\"ds-cell ds-on\" style=\"--heat:0.4\">0.41</span><span class=\"ds-cell ds-off\">0.00</span></span>",
+      "css": ".ds-cells { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; font-family: var(--font-mono); font-size: 0.8125rem; font-variant-numeric: tabular-nums; color: var(--ink); } .ds-cell { display: block; min-width: 0; white-space: nowrap; padding: 0.3rem 0.1rem; border-radius: 4px; text-align: center; background: color-mix(in oklab, var(--heat-color, var(--pen)) calc(var(--heat, 0) * var(--heat-max)), var(--paper)); box-shadow: inset 0 0 0 1px var(--rule); transition: background-color 0.25s; } .ds-neg { --heat-color: var(--warn); } .ds-on { box-shadow: inset 0 0 0 1px var(--pen), 0 0 0 1px var(--pen); } .ds-off { color: var(--ink-2); background: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in oklab, var(--ink) 10%, transparent) 4px 5px); }"
+    },
+    {
+      "name": "Pipeline",
+      "kind": "custom",
+      "refersTo": "pipeline-stage",
+      "description": "A strip of stages joined by drawn arrows, set directly in the prose.",
+      "html": "<ol class=\"ds-pipe\"><li><span class=\"ds-stage\"><span>text</span></span></li><li><svg class=\"ds-arrow\" viewBox=\"0 0 20 10\" width=\"20\" height=\"10\" aria-hidden=\"true\"><path d=\"M0 5h18M14 1l4 4-4 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.25\"/></svg><span class=\"ds-stage\"><a href=\"#\">tokens</a><small>50,257 pieces</small></span></li><li><svg class=\"ds-arrow\" viewBox=\"0 0 20 10\" width=\"20\" height=\"10\" aria-hidden=\"true\"><path d=\"M0 5h18M14 1l4 4-4 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.25\"/></svg><span class=\"ds-stage\"><a href=\"#\">vectors</a><small>768 numbers each</small></span></li></ol>",
+      "css": ".ds-pipe { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.6rem 0; margin: 0; padding: 0; list-style: none; font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.35; color: var(--ink); } .ds-pipe li { display: flex; align-items: center; } .ds-arrow { flex: none; margin-inline: 0.35rem; color: var(--ink-2); } .ds-stage { display: grid; gap: 0.1rem; padding: 0.45rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); } .ds-stage a { color: var(--pen); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em; } .ds-stage a:hover { text-decoration-thickness: 2px; } .ds-stage a:focus-visible { outline: 2px solid var(--pen); outline-offset: 3px; border-radius: 2px; } .ds-stage small { font-size: 0.75rem; color: var(--ink-2); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Engineer's Notepad",
+    "overview": "The site is one sheet of warm paper ruled off by a single legal-pad margin line. Reading happens in a 41rem text column to the right of that line; the margin to its left holds only what a margin holds on a real pad: a short label for the block beside it, or the contents of the note being read. Everything on the sheet is made with five writing tools: ink, one blue pen, one yellow highlighter, a red pencil, and a five-colour highlighter set that exists only to tell token chips apart.\n\nFigures are the second material. Anything the reader operates sits on a dot-grid panel in the field colour, set in the mono cut with tabular numerals; inside a panel, a plain paper \"sheet\" gives a clean ground to anything that needs one. A figure is always the same small vocabulary: a token is a chip, a probability is a horizontal bar on an absolute scale, a vector is a row of number cells. The page is calm so that the figure is the only thing asking to be touched.\n\nThe world is light by default regardless of the system setting, because the owner asked for a light notepad; a toggle in the header stores a dark variant with every token remapped. The earlier dark, heavy-type portfolio was rejected by the owner as too heavy, and that rejection is the one confirmed anti-reference: nothing here is loud, large, or dark by default.",
+    "keyCharacteristics": [
+      "One warm paper ground with a single 1px margin line at 60rem and wider; no cards, bands, or section backgrounds on the page itself.",
+      "One type family in two sibling cuts, two weights (400 and 700), sentence case throughout.",
+      "Colour is a set of tools with fixed jobs; a colour that is not doing its job is not on the page.",
+      "Flat: hairlines and tonal layering, no drop shadows.",
+      "Motion only reports a change of state.",
+      "Every figure works at 390px wide, in both themes, by keyboard, with reduced motion."
+    ],
+    "rules": [
+      {
+        "name": "The One Pen Rule",
+        "body": "Blue is the only link colour and the only focus colour, and inside a figure it marks exactly one thing: what is being measured or what the reader has selected. It is never decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Highlighter Rule",
+        "body": "Yellow means attention or \"newly added\". If nothing is being attended to and nothing just arrived, there is no yellow.",
+        "section": "colors"
+      },
+      {
+        "name": "The Red Pencil Rule",
+        "body": "Red means a negative number or something going wrong. It is never an accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Five Highlighters Rule",
+        "body": "Chip colours cycle by position (index mod 5) and carry no meaning. Never use a chip colour to say something about a token; use pen, mark, or strike-through for that.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink on Yellow Rule",
+        "body": "Text on Highlighter Yellow is always the light theme's ink (#1f1e1b), in both themes, because the highlighter stays bright in the dark.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Cuts Rule",
+        "body": "Quattro is for sentences. Mono is for anything counted, measured, or typed: figure panels, code, dates, token chips. A sentence that appears inside a figure switches back to Quattro.",
+        "section": "typography"
+      },
+      {
+        "name": "The Two Weights Rule",
+        "body": "Only 400 and 700 exist. Emphasis is 700 or a highlighter mark. No capitals, no letter-spacing except the slight negative tracking on a page's `h1`.",
+        "section": "typography"
+      },
+      {
+        "name": "The Margin Rule",
+        "body": "The margin holds a label for the block beside it or the contents of the page. Nothing else goes there: no dates, no notes-to-self, no ornaments. When there is no room for a margin, there is no margin line.",
+        "section": "layout"
+      },
+      {
+        "name": "The Bleed Rule",
+        "body": "Prose never leaves the text column. Only a figure or code block that needs the width takes the bleed.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Paper Rule",
+        "body": "Nothing floats. If something needs to stand apart, give it a hairline or move it one tonal step (paper to field, field to sheet).",
+        "section": "elevation"
+      },
+      {
+        "name": "The State-Only Motion Rule",
+        "body": "Movement reports a change the reader caused or the model produced: a bar rescales (0.4s), a cell or chip changes tint (0.2 to 0.25s), a new token lands with a highlighter flash that fades (0.9s), sampled chips drop in on a 28ms stagger (0.35s), a button nudges 1px when pressed, the theme icon turns half a rotation. One easing, `cubic-bezier(0.16, 1, 0.3, 1)`. Nothing animates on load or on scroll. Reduced motion collapses every transition and animation globally.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep the default light. With no stored choice the site renders the light tokens whatever the system prefers; dark is something the reader turns on.",
+      "Do give every new colour use to an existing tool: pen for links, focus and the measured thing; yellow for attention and newly added; red for negatives and failures; second ink for everything quiet.",
+      "Do build figures from the shared parts: panel, sheet, chip, bar row, number cell, button, slider. A new figure should look like it came from the same pad as the others.",
+      "Do put a label in the margin only when it names the block beside it, and let it fall back above the block below 60rem.",
+      "Do set anything counted or typed in Mono with tabular numerals, and switch back to Quattro for a sentence inside a figure.",
+      "Do draw edges with 1px lines in the rule colour, and use a dashed line for a separation inside a block.",
+      "Do keep text in figures at 0.75rem or larger and body-coloured text at 4.5:1 or better in both themes.",
+      "Do server-render a sensible first state for an interactive figure, and make it work at 390px, by keyboard, with reduced motion.",
+      "Do say in the caption whether a figure's numbers are real model output or made up."
+    ],
+    "donts": [
+      "Don't bring back the rejected look: dark by default, heavy display type, a hero.",
+      "Don't add a drop shadow, a glow, or a blurred surface. `box-shadow` draws 1px rings and nothing else.",
+      "Don't use a gradient as colour. Gradients exist only as the dot grid and the off-cell hatch.",
+      "Don't add a third weight, a second family, capitals, or letter-spacing for emphasis.",
+      "Don't use pen blue, yellow, or red as decoration, and don't give a chip colour a meaning.",
+      "Don't rescale probability bars to the largest value; the scale is always 0 to 100%.",
+      "Don't wrap page content in cards or give sections their own background. The only filled surfaces are figure panels, code, and pipeline stages.",
+      "Don't animate anything on load or scroll, and don't add motion that is not reporting a change of state.",
+      "Don't let prose run into the bleed or the margin.",
+      "Don't reuse the layout's class names `side` and `row` inside a figure."
+    ]
+  }
+}

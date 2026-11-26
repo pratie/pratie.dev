@@ -1,0 +1,183 @@
+---
+// Byte-pair encoding trained in the browser on the text of the page it sits in.
+import Figure from './Figure.astro';
+
+interface Props {
+  text?: string;
+}
+
+const { text = 'The Eiffel Tower is unbelievably tall.' } = Astro.props;
+const uid = crypto.randomUUID().slice(0, 8);
+---
+
+<Figure interactive>
+  <fig-bpe>
+    <div class="type">
+      <label class="fig-label" for={`bpe-text-${uid}`}>Type anything</label>
+      <input
+        class="field-input"
+        id={`bpe-text-${uid}`}
+        type="text"
+        value={text}
+        maxlength="120"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        data-text
+      />
+    </div>
+
+    <div class="slider">
+      <label for={`bpe-merges-${uid}`}>Merges learned</label>
+      <input id={`bpe-merges-${uid}`} type="range" min="0" max="0" value="0" step="1" data-merges disabled />
+      <output for={`bpe-merges-${uid}`} data-merges-out>0</output>
+    </div>
+
+    <div class="sheet">
+      <div class="toks" data-toks><span class="fig-label">Reading this page to learn a vocabulary…</span></div>
+      <p class="ids" data-ids></p>
+    </div>
+
+    <div class="fig-row">
+      <p class="fig-label" data-stats aria-live="polite"></p>
+      <button class="btn primary" type="button" data-play disabled>Replay the merges</button>
+    </div>
+    <p class="fig-label rule" data-rule></p>
+  </fig-bpe>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-bpe {
+    display: block;
+  }
+
+  fig-bpe > * + * {
+    margin-top: 1rem;
+  }
+
+  .type {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .toks {
+    min-height: 3.4rem;
+    align-content: flex-start;
+    font-size: 0.9375rem;
+  }
+
+  .ids {
+    margin: 0.75rem 0 0;
+    padding-top: 0.6rem;
+    border-top: 1px dashed var(--rule);
+    color: var(--ink-2);
+    font-size: 0.8125rem;
+    word-spacing: 0.25em;
+    min-height: 2.2em;
+  }
+
+  .rule {
+    min-height: 1.5em;
+  }
+</style>
+
+<script>
+  import { h, tok, reducedMotion } from '../../lib/fig';
+  import { train, encode, show, type Bpe } from '../../lib/bpe';
+
+  const MAX_MERGES = 600;
+  const FALLBACK =
+    'the model reads the text one token at a time and then the model predicts the next token in the text. ' +
+    'a token is a piece of a word, and the model has seen these pieces many times in the training text.';
+
+  class FigBpe extends HTMLElement {
+    bpe: Bpe | null = null;
+    frame = 0;
+
+    connectedCallback() {
+      const input = this.part<HTMLInputElement>('text');
+      const slider = this.part<HTMLInputElement>('merges');
+      input.addEventListener('input', () => this.draw());
+      slider.addEventListener('input', () => {
+        cancelAnimationFrame(this.frame);
+        this.draw();
+      });
+      this.part('play').addEventListener('click', () => this.replay());
+
+      // The corpus is the prose around the figure. Training takes a few milliseconds.
+      setTimeout(() => {
+        const prose = this.closest('article')?.querySelector('.prose');
+        const blocks = prose ? [...prose.querySelectorAll(':scope > :is(p, ul, ol, h2, h3, blockquote)')] : [];
+        const corpus = blocks.map((el) => el.textContent ?? '').join('\n');
+        this.bpe = train(corpus.length > 400 ? corpus : FALLBACK, MAX_MERGES);
+        slider.max = String(this.bpe.merges.length);
+        slider.value = slider.max;
+        slider.disabled = false;
+        this.part<HTMLButtonElement>('play').disabled = false;
+        this.draw();
+      }, 0);
+    }
+
+    part<T extends HTMLElement = HTMLElement>(name: string) {
+      return this.querySelector<T>(`[data-${name}]`)!;
+    }
+
+    replay() {
+      if (!this.bpe) return;
+      const slider = this.part<HTMLInputElement>('merges');
+      const total = this.bpe.merges.length;
+      cancelAnimationFrame(this.frame);
+      if (reducedMotion()) {
+        slider.value = String(total);
+        this.draw();
+        return;
+      }
+      const started = performance.now();
+      const duration = 5200;
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - started) / duration);
+        // slow at the start, where every merge visibly changes the row
+        slider.value = String(Math.round(total * t * t));
+        this.draw();
+        if (t < 1) this.frame = requestAnimationFrame(tick);
+      };
+      this.frame = requestAnimationFrame(tick);
+    }
+
+    draw() {
+      const bpe = this.bpe;
+      if (!bpe) return;
+      const text = this.part<HTMLInputElement>('text').value;
+      const upTo = Number(this.part<HTMLInputElement>('merges').value);
+      const ids = encode(text, bpe, upTo);
+
+      this.part('merges-out').textContent = String(upTo);
+      this.part('toks').replaceChildren(...ids.map((id, i) => tok(show(id, bpe), `c${i % 5}`)));
+      this.part('ids').textContent = ids.length ? ids.join(' ') : '';
+
+      const bytes = new TextEncoder().encode(text).length;
+      this.part('stats').textContent =
+        `${bytes} ${bytes === 1 ? 'byte' : 'bytes'} in, ${ids.length} ${ids.length === 1 ? 'token' : 'tokens'} out. ` +
+        `Vocabulary: ${256 + upTo}.`;
+
+      const rule = this.part('rule');
+      if (upTo === 0) rule.textContent = 'No merges yet: every byte is its own token.';
+      else {
+        const [a, b] = bpe.merges[upTo - 1];
+        rule.replaceChildren(
+          `Merge ${upTo}: `,
+          tok(show(a, bpe), 'bare'),
+          ' + ',
+          tok(show(b, bpe), 'bare'),
+          ' becomes token ',
+          h('strong', {}, String(255 + upTo)),
+          ', ',
+          tok(show(255 + upTo, bpe), 'c0'),
+        );
+      }
+    }
+  }
+
+  customElements.define('fig-bpe', FigBpe);
+</script>

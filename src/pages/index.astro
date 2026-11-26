@@ -1,0 +1,56 @@
+---
+import Base from '../layouts/Base.astro';
+import NoteList from '../components/NoteList.astro';
+import { allNotes } from '../lib/notes';
+
+const notes = await allNotes();
+
+const projects = [
+  { name: 'BulkTranscripts', url: 'https://bulktranscripts.co', what: 'YouTube transcripts in bulk for videos, channels and playlists. API, MCP server, n8n node, Apify actor.' },
+  { name: 'JustSpeak', url: 'https://justspeak.live', what: 'Voice typing for Mac and Windows.' },
+  { name: 'ytswarm', url: 'https://github.com/pratie/ytswarm', what: 'Ask a whole YouTube channel a question. An agent swarm reads every transcript and answers with timestamps. Rust CLI.' },
+  { name: 'YouTube MCP server', url: 'https://bulktranscripts.co/youtube-mcp-server', what: 'Hosted MCP server for Claude, Cursor and ChatGPT: transcripts, search, channel and playlist listings.' },
+  { name: 'YouTube transcript skill', url: 'https://github.com/pratie/youtube-transcript-skill', what: 'Agent skill for Claude Code, Codex and any SKILL.md agent.' },
+  { name: 'youtube2transcript', url: 'https://youtube2transcript.xyz', what: 'Paste a link, get the transcript.' },
+  { name: 'E-Mail Extractor', url: 'https://github.com/pratie/e-mail-extractor', what: 'Chrome and Edge extension that collects the email addresses on a page.' },
+  { name: 'Poze AI', url: 'https://github.com/pratie/poze', what: 'AI posing and photo app.' },
+  { name: 'Morning Max', url: 'https://github.com/pratie/morning-max-support', what: 'A morning routine app.' },
+];
+---
+
+<Base>
+  <section class="hello col">
+    <h1>pratie</h1>
+    <p class="lede">
+      I'm an AI engineer. I build small tools for AI agents, and I write notes here to understand the models
+      underneath properly. They are written for me. Read along if they help.
+    </p>
+  </section>
+
+  <section class="home-section row" aria-labelledby="notes-h">
+    <h2 class="side" id="notes-h">Notes</h2>
+    <NoteList notes={notes} />
+  </section>
+
+  <section class="home-section row" id="projects" aria-labelledby="projects-h">
+    <h2 class="side" id="projects-h">Projects</h2>
+    <ul class="projects">
+      {
+        projects.map((p) => (
+          <li>
+            <a href={p.url} rel="noopener">{p.name}</a>
+            <span>{p.what}</span>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="home-section row" aria-labelledby="elsewhere-h">
+    <h2 class="side" id="elsewhere-h">Elsewhere</h2>
+    <ul class="plain-links">
+      <li><a href="https://github.com/pratie" rel="me noopener">GitHub</a></li>
+      <li><a href="/rss.xml">RSS feed</a></li>
+    </ul>
+  </section>
+</Base>

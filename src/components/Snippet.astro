@@ -1,0 +1,30 @@
+---
+// Shows one named region of scripts/gpt_numpy.py, so the code on the page is the code that was tested.
+import { Code } from 'astro:components';
+import source from '../../scripts/gpt_numpy.py?raw';
+
+interface Props {
+  /** region name, as in "# --- softmax"; several names are joined; omit for the whole model */
+  name?: string | string[];
+  wide?: boolean;
+}
+
+const { name, wide = false } = Astro.props;
+
+const regions = new Map<string, string>();
+for (const chunk of source.split(/^# --- /m).slice(1)) {
+  const [title, ...body] = chunk.split('\n');
+  if (title.trim() !== 'end') regions.set(title.trim(), body.join('\n').trim());
+}
+
+const wanted = name === undefined ? [...regions.keys()] : [name].flat();
+const code = wanted
+  .map((key) => {
+    const region = regions.get(key);
+    if (region === undefined) throw new Error(`No region "${key}" in scripts/gpt_numpy.py`);
+    return region;
+  })
+  .join('\n\n\n');
+---
+
+<Code code={code} lang="python" theme="css-variables" class={wide ? 'wide' : undefined} />

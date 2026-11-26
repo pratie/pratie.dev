@@ -1,0 +1,397 @@
+---
+// Attention on five tokens and four dimensions, in the three versions the note builds up.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+import { TOKENS, DIMS } from '../../lib/toy';
+
+const modes = [
+  { id: 'plain', label: '1. Plain dot products' },
+  { id: 'learned', label: '2. With Q, K and V' },
+  { id: 'masked', label: '3. With the mask' },
+];
+const reader = 2;
+---
+
+<Figure wide interactive>
+  <fig-attnlab data-reader={reader}>
+    <div class="fig-controls" role="group" aria-label="Version of attention">
+      {
+        modes.map((mode, i) => (
+          <button class="btn" type="button" data-mode={mode.id} aria-pressed={i === 0 ? 'true' : 'false'}>
+            {mode.label}
+          </button>
+        ))
+      }
+    </div>
+    <p class="note" data-note aria-live="polite"></p>
+
+    <div class="sheet">
+      <div class="fig-row">
+        <p class="fig-label">Who is reading?</p>
+        <div class="fig-controls readers" role="group" aria-label="Token doing the reading">
+          {
+            TOKENS.map((t, i) => (
+              <button class="btn" type="button" data-reader-pick={i} aria-pressed={i === reader ? 'true' : 'false'}>
+                {t}
+              </button>
+            ))
+          }
+        </div>
+      </div>
+
+      <div class="calc">
+        <div class="calc-row">
+          <span class="head">being read</span>
+          {
+            TOKENS.map((t, i) => (
+              <button class="col" type="button" data-col={i} aria-pressed="false">
+                <Tok t={t} />
+              </button>
+            ))
+          }
+        </div>
+        <div class="calc-row" data-line="raw">
+          <span class="head">dot product</span>
+          {TOKENS.map(() => <span class="cell" />)}
+        </div>
+        <div class="calc-row" data-line="scaled">
+          <span class="head">÷ √4</span>
+          {TOKENS.map(() => <span class="cell" />)}
+        </div>
+        <div class="calc-row" data-line="masked">
+          <span class="head">mask</span>
+          {TOKENS.map(() => <span class="cell" />)}
+        </div>
+        <div class="calc-row" data-line="weights">
+          <span class="head">softmax</span>
+          {TOKENS.map(() => <span class="cell" />)}
+        </div>
+      </div>
+
+      <p class="detail" data-detail></p>
+    </div>
+
+    <div class="pair">
+      <div class="sheet">
+        <p class="fig-label">What it does to the reader's vector</p>
+        <div class="vectors">
+          <span class="head"></span>
+          {DIMS.map((d) => <span class="dim">{d}</span>)}
+          <span class="head">before</span>
+          {DIMS.map(() => <span class="cell" data-before />)}
+          <span class="head">blend</span>
+          {DIMS.map(() => <span class="cell" data-blend />)}
+        </div>
+        <p class="fig-label" data-blend-note></p>
+      </div>
+
+      <div class="sheet">
+        <p class="fig-label">Every reader at once: one row each</p>
+        <div class="matrix" data-matrix>
+          <span class="head"></span>
+          {TOKENS.map((t) => <span class="dim">{t}</span>)}
+          {
+            TOKENS.map((t, i) => (
+              <>
+                <span class="head">{t}</span>
+                {TOKENS.map((_, j) => <span class="cell" data-m={`${i}-${j}`} />)}
+              </>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </fig-attnlab>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-attnlab {
+    display: block;
+  }
+
+  fig-attnlab > * + * {
+    margin-top: 1rem;
+  }
+
+  .note {
+    margin-bottom: 0;
+    min-height: 4.6em;
+    max-width: 40rem;
+    font-family: var(--font-text);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  .readers .btn {
+    min-height: 2rem;
+    padding: 0.35rem 0.6rem;
+  }
+
+  .calc {
+    display: grid;
+    gap: 0.3rem;
+    margin-top: 1rem;
+  }
+
+  .calc-row,
+  .vectors,
+  .matrix {
+    display: grid;
+    gap: 2px 3px;
+    align-items: center;
+  }
+
+  .calc-row {
+    grid-template-columns: minmax(4.4rem, 7rem) repeat(5, minmax(0, 1fr));
+  }
+
+  .calc-row[hidden] {
+    display: none;
+  }
+
+  .vectors {
+    grid-template-columns: 3.2rem repeat(4, minmax(0, 1fr));
+    margin-block: 0.75rem;
+  }
+
+  .matrix {
+    grid-template-columns: 3.4rem repeat(5, minmax(0, 1fr));
+    margin-top: 0.75rem;
+  }
+
+  .head,
+  .dim {
+    color: var(--ink-2);
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+
+  .dim {
+    text-align: center;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .col {
+    padding: 0.15rem 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .col[aria-pressed='true'] :global(.tok) {
+    box-shadow:
+      inset 0 0 0 1px var(--pen),
+      0 0 0 1px var(--pen);
+  }
+
+  .cell {
+    box-shadow: inset 0 0 0 1px var(--rule);
+    font-size: 0.8125rem;
+    min-height: 1.95em;
+  }
+
+  .cell:global(.on) {
+    box-shadow:
+      inset 0 0 0 1px var(--pen),
+      0 0 0 1px var(--pen);
+  }
+
+  .detail {
+    margin: 0.9rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--rule);
+    min-height: 5.4em;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .pair {
+    display: grid;
+    gap: 1rem;
+  }
+
+  @media (max-width: 34rem) {
+    .calc-row {
+      grid-template-columns: 3.7rem repeat(5, minmax(0, 1fr));
+    }
+
+    .col :global(.tok) {
+      padding-inline: 0.1em;
+      font-size: 0.6875rem;
+    }
+
+    .cell {
+      font-size: 0.75rem;
+    }
+
+    .dim {
+      font-size: 0.6875rem;
+    }
+  }
+
+  @media (min-width: 46rem) {
+    .pair {
+      grid-template-columns: 1fr 1.1fr;
+      align-items: start;
+    }
+  }
+</style>
+
+<script>
+  import { h, num } from '../../lib/fig';
+  import { TOKENS, X, attend, type Mode, type Attended } from '../../lib/toy';
+
+  const NOTES: Record<Mode, string> = {
+    plain:
+      'A score is the dot product of two token vectors, so a token can only find tokens that resemble it. Most of all it finds itself.',
+    learned:
+      'Each token now asks with a query and answers with a key, made by two matrices the model learns. I set them by hand here so that an action looks for the thing doing it, and a time word looks for the action.',
+    masked:
+      'Same scores, but everything to the right of the reader is set to −∞ before softmax, so it gets a weight of exactly zero. This is the version a GPT uses.',
+  };
+
+  const vector = (v: number[]) => `[${v.map((x) => num(x, 2)).join(', ')}]`;
+
+  class FigAttnLab extends HTMLElement {
+    mode: Mode = 'plain';
+    reader = 0;
+    col = 0;
+    result: Record<Mode, Attended> = { plain: attend('plain'), learned: attend('learned'), masked: attend('masked') };
+
+    connectedCallback() {
+      this.reader = Number(this.dataset.reader);
+      this.col = this.best();
+
+      this.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.mode = button.dataset.mode as Mode;
+          this.col = this.best();
+          this.draw();
+        }),
+      );
+      this.querySelectorAll<HTMLButtonElement>('[data-reader-pick]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.reader = Number(button.dataset.readerPick);
+          this.col = this.best();
+          this.draw();
+        }),
+      );
+      this.querySelectorAll<HTMLButtonElement>('[data-col]').forEach((button) => {
+        const pick = () => {
+          this.col = Number(button.dataset.col);
+          this.draw();
+        };
+        button.addEventListener('click', pick);
+        button.addEventListener('pointerenter', (event) => {
+          if (event.pointerType === 'mouse') pick();
+        });
+      });
+      this.draw();
+    }
+
+    /** the column the reader attends to most, as a sensible thing to explain first */
+    best() {
+      const weights = this.result[this.mode].weights[this.reader];
+      return weights.indexOf(Math.max(...weights));
+    }
+
+    line(name: string) {
+      const row = this.querySelector<HTMLElement>(`[data-line="${name}"]`)!;
+      return { row, cells: [...row.querySelectorAll<HTMLElement>('.cell')] };
+    }
+
+    draw() {
+      const { mode, reader, col } = this;
+      const r = this.result[mode];
+      const learned = mode !== 'plain';
+
+      this.querySelectorAll('[data-mode]').forEach((b) =>
+        b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.mode === mode)),
+      );
+      this.querySelectorAll('[data-reader-pick]').forEach((b, i) => b.setAttribute('aria-pressed', String(i === reader)));
+      this.querySelectorAll('[data-col]').forEach((b, i) => b.setAttribute('aria-pressed', String(i === col)));
+      this.querySelector('[data-note]')!.textContent = NOTES[mode];
+
+      const peak = Math.max(...r.raw.flat().map(Math.abs));
+      const fill = (cells: HTMLElement[], values: number[], heatOf: (v: number) => number) =>
+        cells.forEach((cell, j) => {
+          const v = values[j];
+          const hidden = v === -Infinity;
+          cell.textContent = num(v, 2);
+          cell.classList.toggle('off', hidden);
+          cell.classList.toggle('neg', v < 0 && !hidden);
+          cell.classList.toggle('on', j === col);
+          cell.style.setProperty('--heat', hidden ? '0' : String(heatOf(v)));
+        });
+
+      const raw = this.line('raw');
+      fill(raw.cells, r.raw[reader], (v) => Math.abs(v) / peak);
+
+      const scaled = this.line('scaled');
+      scaled.row.hidden = !learned;
+      fill(
+        scaled.cells,
+        r.raw[reader].map((v) => v / r.scale),
+        (v) => (Math.abs(v) * r.scale) / peak,
+      );
+
+      const masked = this.line('masked');
+      masked.row.hidden = mode !== 'masked';
+      fill(masked.cells, r.scores[reader], (v) => (Math.abs(v) * r.scale) / peak);
+
+      fill(this.line('weights').cells, r.weights[reader], (v) => v);
+
+      // the dot product behind the selected column, written out
+      const q = r.Q[reader];
+      const k = r.K[col];
+      const terms = q.map((x, d) => `${num(x, 2)}×${num(k[d], 2)}`).join(' + ');
+      const detail = this.querySelector('[data-detail]')!;
+      const hiddenCol = mode === 'masked' && col > reader;
+      detail.replaceChildren(
+        `${learned ? 'query' : 'vector'} of ${TOKENS[reader]} = ${vector(q)}`,
+        h('br'),
+        `${learned ? 'key' : 'vector'} of ${TOKENS[col]} = ${vector(k)}`,
+        h('br'),
+        `${terms} = `,
+        h('strong', {}, num(r.raw[reader][col], 2)),
+        learned ? `, and ÷ √4 gives ${num(r.raw[reader][col] / r.scale, 2)}` : '',
+        hiddenCol ? `. But ${TOKENS[col]} comes after ${TOKENS[reader]}, so the mask throws it away.` : '',
+      );
+
+      const before = [...this.querySelectorAll<HTMLElement>('[data-before]')];
+      const blend = [...this.querySelectorAll<HTMLElement>('[data-blend]')];
+      before.forEach((cell, d) => {
+        cell.textContent = num(X[reader][d], 2);
+        cell.style.setProperty('--heat', String(Math.min(1, X[reader][d])));
+      });
+      blend.forEach((cell, d) => {
+        cell.textContent = num(r.out[reader][d], 2);
+        cell.style.setProperty('--heat', String(Math.min(1, r.out[reader][d])));
+      });
+      const top = r.weights[reader].indexOf(Math.max(...r.weights[reader]));
+      this.querySelector('[data-blend-note]')!.textContent =
+        `The blend is every visible token's value, weighted by the softmax row. It is ${Math.round(r.weights[reader][top] * 100)}% ${TOKENS[top]}.`;
+
+      r.weights.forEach((row, i) =>
+        row.forEach((w, j) => {
+          const cell = this.querySelector<HTMLElement>(`[data-m="${i}-${j}"]`)!;
+          const hidden = mode === 'masked' && j > i;
+          cell.textContent = hidden ? '' : num(w, 2).replace(/^0\./, '.');
+          cell.classList.toggle('off', hidden);
+          cell.classList.toggle('on', i === reader && !hidden);
+          cell.style.setProperty('--heat', hidden ? '0' : String(w));
+        }),
+      );
+    }
+  }
+
+  customElements.define('fig-attnlab', FigAttnLab);
+</script>

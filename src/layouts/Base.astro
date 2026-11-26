@@ -1,0 +1,104 @@
+---
+import '@fontsource/ia-writer-quattro/400.css';
+import '@fontsource/ia-writer-quattro/400-italic.css';
+import '@fontsource/ia-writer-quattro/700.css';
+import '@fontsource/ia-writer-mono/400.css';
+import '@fontsource/ia-writer-mono/700.css';
+import '../styles/global.css';
+import textFont from '@fontsource/ia-writer-quattro/files/ia-writer-quattro-latin-400-normal.woff2?url';
+import boldFont from '@fontsource/ia-writer-quattro/files/ia-writer-quattro-latin-700-normal.woff2?url';
+
+interface Props {
+  title?: string;
+  description?: string;
+  article?: { date: Date; updated?: Date };
+}
+
+const {
+  title,
+  description = 'AI engineer. Small tools for AI agents, and notes on how the models underneath work.',
+  article,
+} = Astro.props;
+
+const pageTitle = title ? `${title} · pratie` : 'pratie';
+const path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
+const canonical = new URL(path, Astro.site);
+const inNotes = path.startsWith('/notes');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:site_name" content="pratie" />
+    <meta property="og:title" content={title ?? 'pratie'} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:type" content={article ? 'article' : 'website'} />
+    {article && <meta property="article:published_time" content={article.date.toISOString()} />}
+    {article?.updated && <meta property="article:modified_time" content={article.updated.toISOString()} />}
+    <meta name="twitter:card" content="summary" />
+    <meta name="theme-color" content="#fbfaf5" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate" type="application/rss+xml" title="pratie: notes" href="/rss.xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="preload" as="font" type="font/woff2" href={textFont} crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href={boldFont} crossorigin />
+    <script is:inline>
+      try {
+        var saved = localStorage.getItem('theme');
+        if (saved === 'dark' || saved === 'light') document.documentElement.dataset.theme = saved;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="page">
+      <header class="top">
+        <a class="home" href="/">pratie</a>
+        <nav aria-label="Site">
+          <a href="/notes" aria-current={inNotes ? 'page' : undefined}>notes</a>
+          <a href="/#projects">projects</a>
+          <button class="theme" type="button" aria-label="Dark theme" aria-pressed="false" data-theme-toggle>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+              <path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"></path>
+            </svg>
+          </button>
+        </nav>
+      </header>
+      <main id="main">
+        <slot />
+      </main>
+      <footer class="bottom">
+        <span>pratie.dev</span>
+        <span><a href="/rss.xml">RSS</a> · <a href="https://github.com/pratie" rel="me noopener">GitHub</a></span>
+      </footer>
+    </div>
+    <script>
+      const root = document.documentElement;
+      const toggle = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+      const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+
+      const sync = () => {
+        const dark = root.dataset.theme === 'dark';
+        toggle?.setAttribute('aria-pressed', String(dark));
+        themeColor?.setAttribute('content', dark ? '#1a1917' : '#fbfaf5');
+      };
+
+      toggle?.addEventListener('click', () => {
+        const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem('theme', next);
+        } catch {}
+        sync();
+      });
+      sync();
+    </script>
+  </body>
+</html>

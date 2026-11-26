@@ -1,0 +1,24 @@
+---
+interface Props {
+  wide?: boolean;
+  id?: string;
+  /** the figure only fills in once its script runs */
+  interactive?: boolean;
+}
+
+const { wide = false, id, interactive = false } = Astro.props;
+---
+
+<figure class:list={['fig', { wide }]} id={id}>
+  <div class="fig-panel">
+    {
+      interactive && (
+        <noscript>
+          <p class="fig-label">This figure is interactive and needs JavaScript to run.</p>
+        </noscript>
+      )
+    }
+    <slot />
+  </div>
+  {Astro.slots.has('caption') && <figcaption><slot name="caption" /></figcaption>}
+</figure>

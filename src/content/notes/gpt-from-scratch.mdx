@@ -1,0 +1,291 @@
+---
+title: A GPT from scratch, piece by piece
+description: Every layer between token ids and next-token probabilities, written in plain NumPy with numbers small enough to check by hand.
+date: 2026-11-26
+order: 2
+prereqs:
+  - note: how-llms-work
+    why: The map this note zooms into. Start there if tokens, embeddings or the generation loop are fuzzy.
+---
+
+import Snippet from '../../components/Snippet.astro';
+import ArchMap from '../../components/figures/ArchMap.astro';
+import ToyFig from '../../components/figures/ToyFig.astro';
+import SoftmaxFig from '../../components/figures/SoftmaxFig.astro';
+import XentFig from '../../components/figures/XentFig.astro';
+import AttnLab from '../../components/figures/AttnLab.astro';
+import HeadsFig from '../../components/figures/HeadsFig.astro';
+import NormFig from '../../components/figures/NormFig.astro';
+import MlpFig from '../../components/figures/MlpFig.astro';
+
+These are my notes from working through Green Code's video [How to Build a GPT from Scratch](https://www.youtube.com/watch?v=3LWHYlmyqZ0), which builds a GPT's forward pass with nothing but NumPy. I rebuilt it as I watched. The code and the worked numbers below are my own, and at the end I load GPT-2's real weights into the code to check that it is right.
+
+"Forward pass" means the trip from token ids to probabilities and a loss. How the loss turns into better weights is backpropagation, and that is a note for another day.
+
+## The pieces
+
+A GPT is a short list of parts, most of them used again and again.
+
+<ArchMap>
+
+**Every part of a GPT.** The thick line is one token's vector on its way down. Each box links to its section.
+
+</ArchMap>
+
+Every box is one of three things: a table lookup, a matrix multiplication, or a small fixed formula. There is nothing else in there.
+
+One piece of bookkeeping. I will call the number of tokens T and the length of each token's vector d. In GPT-2 small, d is 768. In my examples it is 4. The data moving down that thick line is always a matrix with T rows and d columns: one row per token.
+
+I will follow the order of the video: the two ends first, then the middle.
+
+## Embedding
+
+The model receives integers. The embedding layer is a table with one row for each token in the vocabulary, and embedding a token means reading out its row. In NumPy, that is indexing an array with a list.
+
+<Snippet name="embedding" />
+
+`wte` is the token table. `wpe` is a second table with one row per position, because otherwise the model would have no idea what order the tokens came in. Both start out as small random numbers and get their values from training. The basics note has [a map of real rows from the token table](/notes/how-llms-work#embeddings).
+
+For the rest of this note I will use a toy sentence: "my cat sleeps all day". I made up its vectors so that every dimension means something.
+
+<ToyFig>
+
+**Five tokens, four numbers each.** I invented these so the arithmetic further down can be followed by eye. "Glue" is for words that only hold a sentence together. Real embeddings have no labelled dimensions.
+
+</ToyFig>
+
+## Softmax
+
+Now the other end. The last step of the model produces one score for every token in the vocabulary. The scores are called logits, and they can be any size, positive or negative. Softmax turns them into probabilities: positive numbers that add up to 1.
+
+$$
+\text{softmax}(x)_i = \frac{e^{x_i}}{\sum_j e^{x_j}}
+$$
+
+Three steps. Raise e to the power of every score, which makes everything positive and makes big scores much bigger. Add those up. Divide each one by the total.
+
+<SoftmaxFig>
+
+**Softmax by hand**, on four made-up scores for the word after "The cat sat on the". Edit the scores and watch the probabilities trade off. Then press "Make one score 800".
+
+</SoftmaxFig>
+
+Typed straight into NumPy, the formula is `np.exp(x) / np.exp(x).sum()`. It works until a score gets large. A 64-bit float tops out around $10^{308}$, and $e^{710}$ is already past that.
+
+The fix comes from noticing that softmax only cares about the gaps between the scores. Subtract the same number $c$ from every score and it cancels out:
+
+$$
+\frac{e^{x_i - c}}{\sum_j e^{x_j - c}} = \frac{e^{-c}\,e^{x_i}}{e^{-c}\sum_j e^{x_j}} = \frac{e^{x_i}}{\sum_j e^{x_j}}
+$$
+
+So subtract the largest score. The biggest exponent is now $e^0 = 1$, every other one is between 0 and 1, and nothing can overflow.
+
+<Snippet name="softmax" />
+
+`axis=-1` and `keepdims` make this work on a whole matrix at once, one row at a time. Attention will need that.
+
+A real example of the gaps being all that matter: GPT-2's highest scores for the Eiffel Tower sentence in the basics note are all around −95. That looks alarming and means nothing.
+
+## Cross-entropy loss
+
+Training needs a single number that says how wrong a prediction was. The model gave a probability to every token. We know which token really came next. The loss is
+
+$$
+L = -\sum_i y_i \ln p_i
+$$
+
+where $y_i$ is 1 for the right token and 0 for every other one. So all the terms vanish except one:
+
+$$
+L = -\ln p_{\text{right}}
+$$
+
+<XentFig>
+
+**The loss for one prediction.** Slide the probability the model gave to the right answer.
+
+</XentFig>
+
+The shape of that curve is the point. At a probability of 1 the loss is 0. At 0.5 it is 0.69. At 0.01 it is 4.6, and it keeps climbing without limit. Being confidently wrong costs far more than being unsure.
+
+A useful reference point: a model that knows nothing, and spreads its probability evenly over GPT-2's 50,257 tokens, scores $\ln 50257 = 10.8$. Real GPT-2 scored 2.32 on [the sentence in the basics note](/notes/how-llms-work#training).
+
+There is a numerical trap here too. If the model puts a probability of exactly 0 on the right token, the loss is $\ln 0$, which is minus infinity. The fix is the softmax trick turned inside out. Do not compute the probability and then take its log. Work out the log directly:
+
+$$
+\ln p_i = \ln \frac{e^{x_i}}{\sum_j e^{x_j}} = x_i - \ln \sum_j e^{x_j}
+$$
+
+With the largest score already subtracted, that sum is at least 1, so its log is always safe.
+
+<Snippet name="cross_entropy" />
+
+The `.mean()` is there because the model makes a prediction at every position, and the loss for a sequence is the average over all of them.
+
+## Attention
+
+Some history first, because it explains what attention is for.
+
+Before transformers, the usual design read a sentence one token at a time and squeezed everything it had read into one vector of fixed size. A long passage does not fit in one vector. In 2014, Bahdanau, Cho and Bengio let the model look back at every earlier position and weigh them by how relevant they were. That was attention. In 2017, the paper "Attention Is All You Need" threw away the one-at-a-time reading and kept only the attention. That was the transformer. In 2018, OpenAI kept half of that design, the decoder, and trained it to predict the next token. That was GPT.
+
+Inside a GPT, the job is this. At the start of a block, each token's vector knows only about itself. Attention is how a token gets to read the others.
+
+I will build it in three steps on the toy sentence. The figure does the arithmetic. Switch versions and readers as you go.
+
+<AttnLab>
+
+**Attention on five tokens**, computed live from the toy vectors. Hover or tap a token in the top row to see the dot product behind its score.
+
+</AttnLab>
+
+### Step 1: plain dot products
+
+Pick the token that is reading. Take the dot product of its vector with every token's vector: multiply the matching numbers and add them up. A dot product is large when two vectors point the same way, so it works as a similarity score. Softmax turns the row of scores into weights that add up to 1. The reader's new vector is the weighted average of everyone's vectors.
+
+For all tokens at once, with $X$ as the matrix of T rows:
+
+$$
+\text{out} = \text{softmax}(X X^\top)\,X
+$$
+
+Row $i$ of $X X^\top$ holds token $i$'s dot product with every token, which is exactly the "dot product" row in the figure.
+
+The weakness is in the figure too. "sleeps" puts its biggest weight on itself. With plain dot products a token can only find tokens that resemble it, and what a token needs is usually something different from itself. A verb wants its subject.
+
+### Step 2: queries, keys and values
+
+Give every token three versions of its vector, each made by multiplying with its own learned matrix.
+
+- A **query**: what am I looking for?
+- A **key**: what can I be found by?
+- A **value**: what do I hand over if someone reads me?
+
+Scores are now the reader's query against everyone's key, and the blend is made of values.
+
+$$
+\text{out} = \text{softmax}\!\left(\frac{Q K^\top}{\sqrt{d_k}}\right) V
+$$
+
+In the figure I set the query and key matrices by hand. The query matrix turns "this is an action" into a question, and the key matrix turns "this is a thing" into the matching answer. Switch to version 2: "sleeps" now puts 66% of its weight on "cat". A real model is not handed these matrices. Training finds them.
+
+About the $\sqrt{d_k}$. Dot products grow as vectors get longer, and large scores make softmax put nearly everything on one token, which makes training hard. Dividing by the square root of the key length keeps the scores in a sensible range. One detail that is easy to get wrong: $d_k$ is the length of a key vector. The video calls it the embedding dimension, which is only true while there is a single head. With several heads, it is the length of one head's slice.
+
+### Step 3: the mask
+
+In training, the model predicts every next token of a sentence in a single pass. If "sleeps" could read "all" and "day", predicting what follows "sleeps" would be copying. So before softmax, every score for a token to the right of the reader is replaced by minus infinity. Since $e^{-\infty} = 0$, those tokens get a weight of exactly zero, and the others still add up to 1.
+
+Switch to version 3. Two candidates have disappeared, so "sleeps" now gives "cat" 78%.
+
+That mask is the whole difference between a GPT's attention and the general kind. It is called causal attention.
+
+### Several heads at once
+
+One row of weights per token is limiting. The weights have to add up to 1, so if a token needs two different things, they dilute each other. The answer is to cut the d dimensions into slices and let each slice run its own attention, with its own queries, keys and values. GPT-2 small has 768 dimensions and 12 heads, so 64 dimensions per head.
+
+<HeadsFig>
+
+**Two heads on the toy sentence**, with the mask on. Each row is a reader. In the left grid, "sleeps" finds "cat". In the right one, "all" and "day" find "sleeps".
+
+</HeadsFig>
+
+After the heads have run, their outputs are laid side by side to get back to T rows of d numbers, and one more matrix mixes them together.
+
+Nobody writes a loop over heads. One wide matrix makes every head's queries, keys and values in a single multiplication, a reshape cuts the result into heads, and NumPy's `@` handles all the heads together.
+
+<Snippet name={['linear', 'attention']} wide />
+
+The shapes are the hard part, so here they are in order. `qkv` holds one weight matrix of d by 3d, which is how GPT-2 stores it. `split` turns T by d into heads by T by d/heads. `k.transpose(0, 2, 1)` flips each head's keys, so the product with `q` is heads by T by T: for every head, a grid of scores like the ones above. The mask is a T by T matrix with minus infinity above the diagonal, and adding it applies to every head at once.
+
+The basics note shows [what real heads in GPT-2 look at](/notes/how-llms-work#attention-tokens-read-each-other).
+
+## Layer norm
+
+Numbers drift as they pass through many layers. A vector can come out with huge values, or with everything squeezed near zero, and the next layer has a hard time with either. Layer norm resets each token's vector to a standard size before it goes into attention or the MLP.
+
+$$
+y = \gamma \cdot \frac{x - \text{mean}(x)}{\sqrt{\text{var}(x) + \epsilon}} + \beta
+$$
+
+The mean and the variance are taken across the d numbers of one token's vector. Other tokens and other sentences are not involved.
+
+<NormFig>
+
+**Layer norm on one vector.** However wild the input, the output has a mean of 0 and a standard deviation of 1. Gain and bias then stretch and shift it. In a real model they are learned, with a separate pair for every dimension. Here one slider moves all eight.
+
+</NormFig>
+
+The $\epsilon$ is a tiny constant so that a vector of identical numbers does not cause a division by zero. The gain $\gamma$ and bias $\beta$ start at 1 and 0, so at first the layer only normalises. Training can then undo as much of that as it finds useful.
+
+<Snippet name="layer_norm" />
+
+Where it goes has changed over time. The original transformer and the first GPT normalised after each part. GPT-2, and nearly everything since, normalises before each part and adds one more layer norm after the last block, because that trains more reliably in deep stacks. The code here does it the GPT-2 way.
+
+## The MLP
+
+Once attention has moved information between tokens, every token's vector goes through a small network by itself: a matrix that widens it to four times its length, a nonlinearity, and a matrix that brings it back.
+
+<MlpFig>
+
+**One token through the MLP**, with made-up weights. The hatched cells held negative numbers and were set to zero.
+
+</MlpFig>
+
+The nonlinearity is not optional. Two matrix multiplications in a row are equivalent to one, so without something bent in between, stacking layers buys nothing. ReLU is the simplest bend there is: negative numbers become zero. The video uses ReLU, and so did the original transformer. GPT-2 uses GELU, a smooth curve of the same general shape, so that is what my code uses.
+
+Andrej Karpathy's way of describing the split has stuck with me: attention is where tokens **communicate**, and the MLP is where each token **computes** on what it gathered.
+
+<Snippet name="mlp" />
+
+## Residual connections
+
+Here is how a block uses its two parts.
+
+<Snippet name="block" />
+
+`x = x + ...`, twice. Neither attention nor the MLP replaces the vector. Each one works out a change, and the change is added on. That plus sign is a residual connection, an idea from ResNet, the 2015 paper by He and colleagues that made very deep networks trainable.
+
+It helps in two ways. A freshly initialised block produces a small, meaningless change, and adding that to a vector leaves the vector mostly intact. So a deep stack starts life behaving like a shallow one, instead of scrambling its input twelve times over. And during training, the plus sign gives the error signal a straight road back down through every block.
+
+It is also why the basics note could read the model's guess [after every block](/notes/how-llms-work#each-block-adds-it-does-not-replace). There is one running vector per token, and every block adds to it.
+
+## The whole model
+
+<Snippet name="gpt" />
+
+Embed. Run the blocks. One last layer norm. Then turn each final vector into a score for every token by multiplying with the token table, transposed. The score for a token is the dot product of the final vector with that token's embedding row. GPT-2 reuses its embedding table here instead of learning a separate output matrix.
+
+The result has a row of scores for every position, not only the last. Row $i$ is the prediction for what follows token $i$. Training uses every row. Generating text only needs the last one.
+
+Here is all of it in one place.
+
+<Snippet wide />
+
+Does it work? I loaded GPT-2's real weights into these functions and compared the scores with the reference implementation, on the sentence from the basics note.
+
+```text
+largest difference from the reference implementation: 0.00011
+   ' London' 6.9%
+    ' Paris' 6.9%
+' Amsterdam' 4.0%
+   ' Berlin' 3.2%
+      ' New' 2.8%
+loss on the finished sentence: 2.316
+```
+
+The same top five as [the first figure there](/notes/how-llms-work#the-loop), and the same loss as its last one. Those forty-odd lines of NumPy are the entire forward pass of GPT-2. Everything else is the 124 million numbers you pour into them.
+
+## What is not here
+
+- **Training.** The backward pass, the optimiser, batches. That is the next note in this thread.
+- **Position encodings.** I used GPT-2's learned table without explaining why it works or what newer models do instead.
+- **Dropout.** It only runs during training, and GPT-2 at inference time does not use it.
+- **Speed.** Real implementations cache the keys and values of earlier tokens so that generating a new token does not redo all the old work.
+- **The tokenizer.** Covered [in the basics note](/notes/how-llms-work#tokens).
+
+## Sources
+
+- Green Code, [How to Build a GPT from Scratch](https://www.youtube.com/watch?v=3LWHYlmyqZ0), on the Green Code Codes channel. The video these notes follow.
+- Sebastian Raschka, *Build a Large Language Model (From Scratch)*. The step-by-step route into attention comes from this book, by way of the video.
+- Jay Mody, [GPT in 60 Lines of NumPy](https://jaykmody.com/blog/gpt-from-scratch/) and [Numerically Stable Softmax and Cross Entropy](https://jaykmody.com/blog/stable-softmax/).
+- Andrej Karpathy, [Let's build GPT: from scratch, in code, spelled out](https://www.youtube.com/watch?v=kCc8FmEb1nY). The "communicate, then compute" framing.
+- The code on this page is [one file](https://github.com/pratie/pratie.dev/blob/main/scripts/gpt_numpy.py). Run it to repeat the check against GPT-2.

@@ -1,0 +1,164 @@
+---
+// The pieces of a GPT from token ids to probabilities. Every box links to its section.
+import Figure from './Figure.astro';
+---
+
+<Figure>
+  <svg class="arch" viewBox="0 0 360 500" role="group" aria-labelledby="arch-title">
+    <title id="arch-title">The pieces of a GPT, from token ids at the top to probabilities at the bottom</title>
+
+    <text x="14" y="16">token ids</text>
+    <path class="stream" d="M70 24V470"></path>
+    <path class="tip" d="M64 462l6 9 6-9"></path>
+    <text x="14" y="492">next-token probabilities</text>
+
+    <a href="#embedding">
+      <rect class="box" x="14" y="34" width="112" height="30" rx="5"></rect>
+      <text x="70" y="49" class="mid">embedding</text>
+    </a>
+    <text class="aside" x="140" y="49" dominant-baseline="central">token row + position row</text>
+
+    <rect class="frame" x="4" y="82" width="352" height="212" rx="8"></rect>
+    <text class="aside" x="346" y="100" text-anchor="end">one block, stacked N times</text>
+
+    <path class="wire" d="M70 132H150M234 132H250M298 147V176H84"></path>
+    <path class="tip" d="M91 171l-8 5 8 5"></path>
+    <a href="#layer-norm">
+      <rect class="box" x="150" y="117" width="84" height="30" rx="5"></rect>
+      <text x="192" y="132" class="mid">layer norm</text>
+    </a>
+    <a href="#attention">
+      <rect class="box" x="250" y="117" width="96" height="30" rx="5"></rect>
+      <text x="298" y="132" class="mid">attention</text>
+    </a>
+    <a href="#residual-connections" aria-label="add: residual connection">
+      <circle class="plus" cx="70" cy="176" r="10"></circle>
+      <path class="plus-sign" d="M65 176h10M70 171v10"></path>
+    </a>
+
+    <path class="wire" d="M70 222H150M234 222H250M298 237V266H84"></path>
+    <path class="tip" d="M91 261l-8 5 8 5"></path>
+    <a href="#layer-norm">
+      <rect class="box" x="150" y="207" width="84" height="30" rx="5"></rect>
+      <text x="192" y="222" class="mid">layer norm</text>
+    </a>
+    <a href="#the-mlp">
+      <rect class="box" x="250" y="207" width="96" height="30" rx="5"></rect>
+      <text x="298" y="222" class="mid">MLP</text>
+    </a>
+    <a href="#residual-connections" aria-label="add: residual connection">
+      <circle class="plus" cx="70" cy="266" r="10"></circle>
+      <path class="plus-sign" d="M65 266h10M70 261v10"></path>
+    </a>
+
+    <a href="#layer-norm">
+      <rect class="box" x="14" y="314" width="112" height="30" rx="5"></rect>
+      <text x="70" y="329" class="mid">layer norm</text>
+    </a>
+    <a href="#the-whole-model">
+      <rect class="box" x="14" y="362" width="112" height="30" rx="5"></rect>
+      <text x="70" y="377" class="mid">linear</text>
+    </a>
+    <text class="aside" x="140" y="377" dominant-baseline="central">a score for every token</text>
+    <a href="#softmax">
+      <rect class="box" x="14" y="410" width="112" height="30" rx="5"></rect>
+      <text x="70" y="425" class="mid">softmax</text>
+    </a>
+
+    <path class="wire dashed" d="M126 425H192"></path>
+    <path class="tip" d="M186 420l8 5-8 5"></path>
+    <a href="#cross-entropy-loss">
+      <rect class="box dashed" x="198" y="410" width="148" height="30" rx="5"></rect>
+      <text x="272" y="425" class="mid">cross-entropy loss</text>
+    </a>
+    <text class="aside" x="272" y="458" text-anchor="middle">training only</text>
+  </svg>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .arch {
+    display: block;
+    width: 100%;
+    max-width: 26rem;
+    height: auto;
+    margin-inline: auto;
+    font-size: 12.5px;
+    fill: var(--ink);
+  }
+
+  .mid {
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+
+  .aside {
+    fill: var(--ink-2);
+    font-size: 11.5px;
+  }
+
+  .stream {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 2;
+  }
+
+  .wire,
+  .tip {
+    fill: none;
+    stroke: var(--ink-2);
+    stroke-width: 1.25;
+  }
+
+  .tip {
+    stroke: var(--ink);
+    stroke-linejoin: round;
+  }
+
+  .dashed {
+    stroke-dasharray: 4 3;
+  }
+
+  .frame {
+    fill: none;
+    stroke: var(--ink-2);
+    stroke-dasharray: 2 4;
+  }
+
+  .box {
+    fill: var(--paper);
+    stroke: var(--ink);
+    transition: fill 0.15s;
+  }
+
+  .plus {
+    fill: var(--mark);
+    stroke: var(--ink);
+  }
+
+  .plus-sign {
+    fill: none;
+    stroke: #1f1e1b;
+    stroke-width: 1.5;
+  }
+
+  a text {
+    fill: var(--pen);
+    text-decoration: underline;
+  }
+
+  a:hover .box,
+  a:focus-visible .box {
+    fill: var(--pen-wash);
+  }
+
+  a:focus-visible {
+    outline: none;
+  }
+
+  a:focus-visible .box,
+  a:focus-visible .plus {
+    stroke: var(--pen);
+    stroke-width: 2;
+  }
+</style>

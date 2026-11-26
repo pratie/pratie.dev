@@ -1,0 +1,68 @@
+---
+// How GPT-2's real tokenizer splits a few strings: the pieces, and the integers the model receives.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+import data from '../../data/gpt2/tokens.json';
+
+interface Props {
+  /** strings to show; each must have been tokenised by scripts/gpt2_figures.py */
+  texts: string[];
+}
+
+const { texts } = Astro.props;
+const rows = texts.map((text) => {
+  const row = data.find((d) => d.text === text);
+  if (!row) throw new Error(`"${text}" is not in src/data/gpt2/tokens.json. Add it to scripts/gpt2_figures.py and rerun.`);
+  return row;
+});
+---
+
+<Figure>
+  <div class="sheet rows">
+    {
+      rows.map((row) => (
+        <div class:list={['pieces', { full: row.tokens.length > 4 }]}>
+          {row.tokens.map(([t, id], i) => (
+            <span class="piece">
+              <Tok t={String(t)} c={i} />
+              <span class="id">{id}</span>
+            </span>
+          ))}
+        </div>
+      ))
+    }
+  </div>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .rows {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+  }
+
+  .pieces.full {
+    flex-basis: 100%;
+    padding-bottom: 1rem;
+    border-bottom: 1px dashed var(--rule);
+  }
+
+  .pieces {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem 0.3rem;
+  }
+
+  .piece {
+    display: grid;
+    justify-items: center;
+    gap: 0.15rem;
+    min-width: 2.4rem;
+  }
+
+  .id {
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+</style>

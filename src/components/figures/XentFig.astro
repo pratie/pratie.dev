@@ -1,0 +1,202 @@
+---
+// Cross-entropy for one prediction: slide the probability given to the right token, read the loss.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+
+const uid = crypto.randomUUID().slice(0, 8);
+
+// The right answer is first; the rest share whatever probability is left, in these proportions.
+const words = [' mat', ' sofa', ' roof', ' moon'];
+const share = [0, 0.5, 0.3, 0.2];
+
+// plot area for the curve, in viewBox units
+const W = 320;
+const H = 190;
+const L = 34;
+const R = 10;
+const T = 10;
+const B = 30;
+const MAX_LOSS = 5;
+const px = (p: number) => L + p * (W - L - R);
+const py = (loss: number) => T + (1 - Math.min(loss, MAX_LOSS) / MAX_LOSS) * (H - T - B);
+
+const curve = Array.from({ length: 200 }, (_, i) => {
+  const p = Math.exp(-MAX_LOSS) + (i / 199) * (1 - Math.exp(-MAX_LOSS));
+  return `${i === 0 ? 'M' : 'L'}${px(p).toFixed(1)} ${py(-Math.log(p)).toFixed(1)}`;
+}).join('');
+---
+
+<Figure interactive>
+  <fig-xent data-share={JSON.stringify(share)} data-plot={JSON.stringify({ W, H, L, R, T, B, MAX_LOSS })}>
+    <div class="slider">
+      <label for={`xent-${uid}`}>Probability given to the right token</label>
+      <input id={`xent-${uid}`} type="range" min="0.01" max="1" step="0.01" value="0.25" data-p />
+    </div>
+
+    <div class="pair">
+      <div class="sheet">
+        <svg class="plot" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Loss falls from very large to zero as the probability goes from 0 to 1">
+          {
+            [0, 1, 2, 3, 4, 5].map((loss) => (
+              <g>
+                <path class="grid" d={`M${L} ${py(loss)}H${W - R}`} />
+                <text class="tick" x={L - 6} y={py(loss)} text-anchor="end" dominant-baseline="central">
+                  {loss}
+                </text>
+              </g>
+            ))
+          }
+          {
+            [0, 0.25, 0.5, 0.75, 1].map((p) => (
+              <text class="tick" x={px(p)} y={H - 10} text-anchor="middle">
+                {p}
+              </text>
+            ))
+          }
+          <path class="curve" d={curve}></path>
+          <path class="drop" data-drop d=""></path>
+          <circle class="dot" data-dot r="5"></circle>
+        </svg>
+        <p class="fig-label">loss = −ln(probability)</p>
+      </div>
+
+      <div class="panel">
+        <p class="readout" aria-live="polite">
+          probability <span data-p-out>0.25</span>, loss <strong data-loss>1.39</strong>
+        </p>
+        <div class="bars" data-bars>
+          {
+            words.map((w, i) => (
+              <div class:list={['bar-row', { 'is-picked': i === 0 }]}>
+                <span class="name">
+                  <Tok t={w} />
+                </span>
+                <span class="bar-track">
+                  <span class="bar-fill" />
+                </span>
+                <span class="pct" />
+              </div>
+            ))
+          }
+        </div>
+        <p class="fig-label">
+          The model's guesses for "The cat sat on the". The right answer is <Tok t=" mat" />. Only its bar counts.
+        </p>
+      </div>
+    </div>
+  </fig-xent>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-xent {
+    display: block;
+  }
+
+  .slider {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .pair {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  @media (min-width: 40rem) {
+    .pair {
+      grid-template-columns: 1.15fr 1fr;
+      align-items: start;
+    }
+  }
+
+  .plot {
+    display: block;
+    width: 100%;
+    height: auto;
+    font-size: 11px;
+    overflow: visible;
+  }
+
+  .grid {
+    stroke: var(--rule);
+  }
+
+  .tick {
+    fill: var(--ink-2);
+  }
+
+  .curve {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.75;
+  }
+
+  .drop {
+    fill: none;
+    stroke: var(--pen);
+    stroke-dasharray: 3 3;
+  }
+
+  .dot {
+    fill: var(--pen);
+    stroke: var(--paper);
+    stroke-width: 2;
+  }
+
+  .panel {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .readout {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .readout strong {
+    font-size: 1.75rem;
+    color: var(--pen);
+    margin-left: 0.3rem;
+  }
+
+  .bar-row {
+    grid-template-columns: 4.2rem 1fr 3rem;
+  }
+</style>
+
+<script>
+  import { num, pct } from '../../lib/fig';
+
+  class FigXent extends HTMLElement {
+    connectedCallback() {
+      this.querySelector('[data-p]')!.addEventListener('input', () => this.draw());
+      this.draw();
+    }
+
+    draw() {
+      const share: number[] = JSON.parse(this.dataset.share ?? '[]');
+      const plot = JSON.parse(this.dataset.plot ?? '{}');
+      const p = Number(this.querySelector<HTMLInputElement>('[data-p]')!.value);
+      const loss = -Math.log(p);
+
+      const x = plot.L + p * (plot.W - plot.L - plot.R);
+      const y = plot.T + (1 - Math.min(loss, plot.MAX_LOSS) / plot.MAX_LOSS) * (plot.H - plot.T - plot.B);
+      const floor = plot.H - plot.B;
+      this.querySelector('[data-dot]')!.setAttribute('transform', `translate(${x} ${y})`);
+      this.querySelector('[data-drop]')!.setAttribute('d', `M${plot.L} ${y}H${x}V${floor}`);
+
+      this.querySelector('[data-loss]')!.textContent = num(loss, 2);
+      this.querySelector('[data-p-out]')!.textContent = p.toFixed(2);
+
+      this.querySelectorAll<HTMLElement>('.bar-row').forEach((row, i) => {
+        const value = i === 0 ? p : (1 - p) * share[i];
+        row.querySelector<HTMLElement>('.bar-fill')!.style.setProperty('--p', String(value));
+        row.querySelector('.pct')!.textContent = pct(value);
+      });
+    }
+  }
+
+  customElements.define('fig-xent', FigXent);
+</script>

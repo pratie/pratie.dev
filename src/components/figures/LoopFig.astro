@@ -1,0 +1,252 @@
+---
+// The generation loop, replayed from real GPT-2 output: guesses, pick, append, again.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+import data from '../../data/gpt2/loop.json';
+import { pct } from '../../lib/fig';
+
+const first = data.runs[0].steps[0];
+---
+
+<Figure interactive>
+  <fig-loop data-runs={JSON.stringify(data.runs)} data-prompt={data.prompt.join('')}>
+    <div class="fig-controls" role="group" aria-label="How each token gets picked">
+      {
+        data.runs.map((run, i) => (
+          <button class="btn" type="button" data-run={i} aria-pressed={i === 0 ? 'true' : 'false'}>
+            {run.label}
+          </button>
+        ))
+      }
+    </div>
+
+    <p class="sheet text" data-text>{data.prompt.join('')}</p>
+
+    <div class="fig-row">
+      <p class="fig-label" data-head>GPT-2's guesses for the next token</p>
+      <p class="fig-label" data-count>token 1 of {data.runs[0].steps.length}</p>
+    </div>
+
+    <div class="bars" data-bars>
+      {
+        first.top.map(([t, p]) => (
+          <div class="bar-row">
+            <span class="name">
+              <Tok t={String(t)} />
+            </span>
+            <span class="bar-track">
+              <span class="bar-fill" style={`--p:${p}`} />
+            </span>
+            <span class="pct">{pct(Number(p))}</span>
+          </div>
+        ))
+      }
+    </div>
+
+    <p class="fig-label picked" data-picked aria-live="polite">Nothing picked yet.</p>
+
+    <div class="fig-controls">
+      <button class="btn primary" type="button" data-next>Next token</button>
+      <button class="btn" type="button" data-play>Play</button>
+      <button class="btn" type="button" data-reset>Start over</button>
+    </div>
+  </fig-loop>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-loop {
+    display: block;
+  }
+
+  fig-loop > * + * {
+    margin-top: 1rem;
+  }
+
+  .text {
+    margin-bottom: 0;
+    min-height: 5.6em;
+    font-family: var(--font-text);
+    font-size: 1rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  .text :global(.gen) {
+    padding-block: 0.12em;
+    border-radius: 3px;
+    background: var(--mark-wash);
+    box-shadow: -1px 0 0 var(--paper);
+  }
+
+  .text :global(.gen.new) {
+    animation: land 0.9s var(--ease);
+  }
+
+  @keyframes land {
+    from {
+      background: var(--mark-ground);
+    }
+  }
+
+  .bars {
+    min-height: 9.6rem;
+  }
+
+  .bars :global(.bar-row.extra) {
+    margin-top: 0.25rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed var(--rule);
+  }
+
+  .bars :global(.done) {
+    margin: 0;
+    max-width: 34rem;
+    color: var(--ink-2);
+  }
+
+  .picked {
+    min-height: 1.5em;
+  }
+</style>
+
+<script>
+  import { h, tok, pct, wait } from '../../lib/fig';
+
+  interface Step {
+    top: [string, number][];
+    pick: string;
+    p: number;
+    rank: number;
+  }
+  interface Run {
+    id: string;
+    label: string;
+    steps: Step[];
+  }
+
+  const VOCAB = '50,257';
+  const ordinal = (n: number) => {
+    const tens = n % 100;
+    const suffix = tens > 10 && tens < 14 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+    return `${n.toLocaleString('en')}${suffix}`;
+  };
+
+  class FigLoop extends HTMLElement {
+    runs: Run[] = [];
+    prompt = '';
+    run = 0;
+    at = 0;
+    busy = false;
+    playing = false;
+
+    connectedCallback() {
+      this.runs = JSON.parse(this.dataset.runs ?? '[]');
+      this.prompt = this.dataset.prompt ?? '';
+      this.part('next').addEventListener('click', () => {
+        this.stop();
+        void this.next();
+      });
+      this.part('play').addEventListener('click', () => (this.playing ? this.stop() : void this.play()));
+      this.part('reset').addEventListener('click', () => this.reset());
+      this.querySelectorAll<HTMLButtonElement>('[data-run]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.run = Number(button.dataset.run);
+          this.querySelectorAll('[data-run]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+          this.reset();
+        }),
+      );
+      this.draw();
+    }
+
+    part(name: string) {
+      return this.querySelector<HTMLElement>(`[data-${name}]`)!;
+    }
+
+    get steps() {
+      return this.runs[this.run].steps;
+    }
+
+    reset() {
+      this.stop();
+      this.at = 0;
+      this.part('picked').textContent = 'Nothing picked yet.';
+      this.draw();
+    }
+
+    stop() {
+      this.playing = false;
+      this.part('play').textContent = 'Play';
+    }
+
+    async play() {
+      if (this.at >= this.steps.length) this.reset();
+      this.playing = true;
+      this.part('play').textContent = 'Pause';
+      while (this.playing && this.at < this.steps.length) {
+        await this.next();
+        await wait(250);
+      }
+      this.stop();
+    }
+
+    row(text: string, p: number, extra = false) {
+      return h(
+        'div',
+        { class: extra ? 'bar-row extra is-picked' : 'bar-row' },
+        h('span', { class: 'name' }, tok(text, 'bare')),
+        h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', vars: { '--p': p } })),
+        h('span', { class: 'pct' }, pct(p)),
+      );
+    }
+
+    draw(fresh = false) {
+      const steps = this.steps;
+      const done = this.at >= steps.length;
+
+      this.part('text').replaceChildren(
+        this.prompt,
+        ...steps
+          .slice(0, this.at)
+          .map((s, i) => h('span', { class: fresh && i === this.at - 1 ? 'gen new' : 'gen' }, s.pick.replace(/\n/g, '⏎'))),
+      );
+
+      const bars = this.part('bars');
+      if (done) {
+        bars.replaceChildren(
+          h('p', { class: 'done' }, 'That is where I stopped it. The model would keep going for as long as you kept asking.'),
+        );
+      } else {
+        bars.replaceChildren(...steps[this.at].top.map(([text, p]) => this.row(text, p)));
+      }
+
+      this.part('count').textContent = done ? `${steps.length} tokens written` : `token ${this.at + 1} of ${steps.length}`;
+      (this.part('next') as HTMLButtonElement).disabled = done;
+    }
+
+    async next() {
+      if (this.busy || this.at >= this.steps.length) return;
+      this.busy = true;
+      const step = this.steps[this.at];
+      const bars = this.part('bars');
+      const index = step.top.findIndex(([text]) => text === step.pick);
+
+      if (index >= 0) bars.children[index].classList.add('is-picked');
+      else bars.append(this.row(step.pick, step.p, true));
+
+      const greedy = this.runs[this.run].id === 'greedy';
+      this.part('picked').replaceChildren(
+        greedy ? 'Took the top one: ' : 'The dice picked ',
+        tok(step.pick, 'bare'),
+        greedy ? `, ${pct(step.p)}.` : `, ${pct(step.p)}. It was the ${ordinal(step.rank)} most likely of ${VOCAB}.`,
+      );
+
+      await wait(700);
+      this.at++;
+      this.draw(true);
+      this.busy = false;
+    }
+  }
+
+  customElements.define('fig-loop', FigLoop);
+</script>

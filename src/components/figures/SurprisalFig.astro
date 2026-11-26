@@ -1,0 +1,97 @@
+---
+// One finished sentence, scored token by token: the probability GPT-2 gave to what was actually written.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+import data from '../../data/gpt2/surprisal.json';
+import { pct, tokenParts } from '../../lib/fig';
+
+const CAP = 7; // loss at which the tint is fully on
+const cells = data.tokens.map((t) => {
+  const loss = -Math.log(t.p);
+  const { lead, body } = tokenParts(t.t);
+  return { ...t, loss, heat: Math.min(1, loss / CAP), lead, body, right: t.guess === t.t };
+});
+---
+
+<Figure>
+  <div class="sheet">
+    <div class="cells">
+      {
+        cells.map((c) => (
+          <div class="item">
+            <span class="tok scored" style={`--heat:${c.heat.toFixed(3)}`}>{c.lead && <span class="sp">·</span>}{c.body}</span>
+            <span class="p">{pct(c.p)}</span>
+            <span class="loss">{c.loss.toFixed(1)}</span>
+            <span class="guess">{c.right ? <span class="same">same</span> : <Tok t={c.guess} />}</span>
+          </div>
+        ))
+      }
+    </div>
+    <dl class="key">
+      <div><dt>row 1</dt><dd>the token that was actually written; redder means the model was more surprised</dd></div>
+      <div><dt>row 2</dt><dd>the probability GPT-2 gave it</dd></div>
+      <div><dt>row 3</dt><dd>the loss, −ln(probability)</dd></div>
+      <div><dt>row 4</dt><dd>what GPT-2 would have guessed instead</dd></div>
+    </dl>
+  </div>
+  <p class="fig-label">Average loss over the sentence: <strong>{data.loss.toFixed(2)}</strong></p>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .cells {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 0.35rem;
+  }
+
+  .item {
+    display: grid;
+    justify-items: center;
+    gap: 0.15rem;
+    min-width: 3rem;
+  }
+
+  .scored {
+    background: color-mix(in oklab, var(--warn) calc(var(--heat) * var(--heat-max)), var(--paper));
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+
+  .p,
+  .loss {
+    font-size: 0.75rem;
+  }
+
+  .loss,
+  .same {
+    color: var(--ink-2);
+  }
+
+  .guess {
+    font-size: 0.75rem;
+    min-height: 1.6em;
+  }
+
+  .key {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0.9rem 0 0;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--rule);
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+
+  .key div {
+    display: grid;
+    grid-template-columns: 3.2rem 1fr;
+  }
+
+  .key dd {
+    margin: 0;
+  }
+
+  strong {
+    color: var(--ink);
+  }
+</style>

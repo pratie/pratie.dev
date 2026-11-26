@@ -1,0 +1,40 @@
+---
+// A vector as a row of number cells. Positive leans blue, negative leans red, zero stays paper.
+import { num } from '../../lib/fig';
+
+interface Props {
+  values: number[];
+  /** value at which the tint is fully on */
+  max?: number;
+  digits?: number;
+  /** show these cells hatched: masked out, or switched off */
+  off?: boolean[];
+}
+
+const { values, max = 1, digits = 2, off = [] } = Astro.props;
+---
+
+<span class="cells" style={`--n:${values.length}`}>
+  {
+    values.map((v, i) => (
+      <span
+        class:list={['cell', { neg: v < 0, off: off[i] }]}
+        style={off[i] ? undefined : `--heat:${Math.min(1, Math.abs(v) / max).toFixed(3)}`}
+      >
+        {num(v, digits)}
+      </span>
+    ))
+  }
+</span>
+
+<style>
+  .cells {
+    display: grid;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .cell {
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+</style>

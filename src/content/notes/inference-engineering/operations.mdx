@@ -4,7 +4,7 @@ short: Running it for real
 description: The last layer is the least glamorous and the one users notice most. Where the GPUs come from, what happens when they break, how to ship a change safely, and what a token really costs.
 date: 2026-11-26
 series: inference-engineering
-chapter: 13
+chapter: 14
 book:
   - where: Section 7.3, Multi-Cloud Capacity Management (pp. 193–199)
     what: Buying GPUs, treating several clouds as one pool, routing by geography, reliability, security and compliance.
@@ -12,6 +12,8 @@ book:
     what: Kinds of testing, canary releases, estimating cost on dedicated hardware, and what to monitor.
   - where: Section 7.5, Client Code (pp. 204–207)
     what: Latency added on the client side, asynchronous requests, and streaming protocols.
+  - where: Section 7.6, Production Inference with Baseten (p. 208)
+    what: A page about the author's own company. I left it out of these notes.
 ---
 
 import CalcFig from '../../../components/figures/CalcFig.astro';
@@ -75,6 +77,8 @@ Security could fill its own series, so I will only pass on how the book frames i
 
 Its simplest piece of advice is one I liked for being so plain. Do not store what you do not need. Prompts and answers that are never saved cannot leak.
 
+Then there is compliance, which is about being able to prove it. If your product has to meet a standard such as SOC 2, or a law such as HIPAA for health data, then so does every provider underneath you. And some countries require that their residents' data is processed inside their borders. Both are easier with [many clouds run as one pool](#many-clouds-one-pool), because work can be moved to a provider or a region that qualifies.
+
 ## Shipping a change without breaking things
 
 Every change to a serving system is a risk, whether it is a new model, a new engine version or a different setting. There are three ways to test one, in increasing order of realism: poke at it by hand, flood it with generated traffic, or copy real traffic onto it, the shadowing from [chapter 3](/inference-engineering/latency-and-throughput).
@@ -125,11 +129,13 @@ You cannot fix what you cannot see. The book's list of what to measure is worth 
 
 The value is in seeing them together. A jump in latency means one thing if the request count jumped with it, and something else entirely if the prompts suddenly got longer.
 
+The book adds one piece of advice about where to look at them: in the same monitoring tools your team already uses for the rest of the product, so that a problem in inference shows up next to everything it affects.
+
 ## The other end of the wire
 
 One last place hides latency, and it is easy to miss because it is not on the server at all. It is the code that calls the server.
 
-Opening a new secure connection takes a few tens of milliseconds. On a 300-millisecond budget, that is a tenth of it gone before the model has seen anything. Reusing an open connection for the next request avoids paying again. The standard client libraries do this quietly. If you write your own client, it is on you.
+Opening a new secure connection takes a few tens of milliseconds. On a 300-millisecond budget, that is a tenth of it gone before the model has seen anything. Reusing an open connection for the next request avoids paying again. The standard client libraries, of which the OpenAI SDK is the most common, do this quietly. If you write your own client, it is on you.
 
 For work nobody is waiting on, an ordinary request is the wrong shape, because it will time out after a few minutes. An **asynchronous** request says "here is the job, call me back at this address when it is done", and can then take hours.
 
@@ -137,7 +143,7 @@ And for live audio or video, a single request and response is not enough. Both s
 
 ## What I would do first
 
-That is the whole book, and it is a lot. If I were starting a deployment tomorrow, this is the order I would take things in, based on everything above.
+That is the whole of the book's main text, and it is a lot. If I were starting a deployment tomorrow, this is the order I would take things in, based on everything above.
 
 1. Write down the numbers that matter: how long a user can wait, what a request can cost, how much traffic there is and when.
 2. Find the smallest model that passes my own evals.
@@ -148,4 +154,6 @@ That is the whole book, and it is a lot. If I were starting a deployment tomorro
 7. Get cold starts down, then let the autoscaler run lean.
 8. Add the heavier techniques only when the traffic is large enough to pay for them.
 
-The thing I will keep from all of this is how physical it is. Under every technique is the same pair of limits from chapter 4: how fast a chip can calculate, and how fast it can fetch. Batching, caching, quantizing, speculating, splitting and scaling are all ways of working around one of those two, for a particular product, at a price somebody is willing to pay.
+The thing I will keep from all of this is how physical it is. Under every technique is the same pair of limits from chapter 5: how fast a chip can calculate, and how fast it can fetch. Batching, caching, quantizing, speculating, splitting and scaling are all ways of working around one of those two, for a particular product, at a price somebody is willing to pay.
+
+Two pages follow for looking things up: [every term in one place](/inference-engineering/glossary), and [where to read next](/inference-engineering/further-reading).

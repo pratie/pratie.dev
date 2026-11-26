@@ -1,0 +1,96 @@
+---
+// One conversation after real chat templates have flattened it into a single string.
+// The strings and the token counts come from the models' own tokenizers, through
+// scripts/inference_bench.py templates.
+import Figure from './Figure.astro';
+import data from '../../data/bench/templates.json';
+---
+
+<Figure>
+  <div class="sheet">
+    <p class="fig-label">What I sent: two messages</p>
+    {
+      data.messages.map((message) => (
+        <p class="msg">
+          <span class="role">{message.role}</span>
+          {message.content}
+        </p>
+      ))
+    }
+  </div>
+  {
+    data.models.map((model) => (
+      <div class="sheet">
+        <p class="fig-label">What {model.name} is given: one string</p>
+        <p class="flat">
+          {model.parts.map((part) =>
+            part.kind === 'content' ? (
+              <span>{part.text}</span>
+            ) : (
+              part.text.split('\n').map((piece, i) => (
+                <>
+                  {i > 0 && (
+                    <>
+                      <span class="nl" aria-label="new line">
+                        ↵
+                      </span>
+                      <br />
+                    </>
+                  )}
+                  {piece && <span class="added">{piece}</span>}
+                </>
+              ))
+            ),
+          )}
+        </p>
+        <p class="fig-label count">
+          <strong>{model.tokens}</strong> tokens. My two messages are {model.content_tokens} of them. The template added
+          the other {model.tokens - model.content_tokens}.
+        </p>
+      </div>
+    ))
+  }
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .msg {
+    margin: 0.5rem 0 0;
+  }
+
+  .role {
+    display: inline-block;
+    min-width: 4.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--ink-2);
+  }
+
+  .flat {
+    margin: 0.6rem 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+  }
+
+  .added {
+    background: var(--mark-wash);
+    padding-inline: 0.15em;
+  }
+
+  .nl {
+    padding-left: 0.2em;
+    color: var(--ink-2);
+  }
+
+  .count {
+    margin-top: 0.8rem;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--rule);
+  }
+
+  strong {
+    color: var(--ink);
+  }
+</style>

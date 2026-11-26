@@ -4,7 +4,7 @@ short: The KV cache
 description: To write one more token, a model does not need to reprocess everything before it. Keeping that work is the most important optimisation in inference, and it is paid for in memory.
 date: 2026-11-26
 series: inference-engineering
-chapter: 9
+chapter: 10
 prereqs:
   - note: gpt-from-scratch
     why: Queries, keys and values, worked through with small numbers. This chapter leans on them.
@@ -101,7 +101,7 @@ Looking at single tokens makes the reason plain.
 
 Without the cache, token {lastStep.step} takes {count(lastStep.without_ms / firstStep.without_ms)} times as long as token {firstStep.step}. With it, the time hardly moves. It does creep up a little, because a new token still has to look at every stored key, and there are more of them each time.
 
-This is so effective that nobody runs without it. Every inference engine uses a KV cache by default. In fact, "prefill" from [chapter 4](/inference-engineering/prefill-and-decode) could just as well be called "filling the cache": reading the prompt means computing the keys and values for every token in it, ready for decode to use.
+This is so effective that nobody runs without it. Every inference engine uses a KV cache by default. In fact, "prefill" from [chapter 5](/inference-engineering/prefill-and-decode) could just as well be called "filling the cache": reading the prompt means computing the keys and values for every token in it, ready for decode to use.
 
 ## What it costs
 
@@ -162,18 +162,15 @@ It also explains a line on API price lists. "Cached input tokens" are cheaper be
 
 ## Where to keep it
 
-A cache that is this valuable and this large raises a storage question. GPU memory is the fastest place and the smallest. The book lists four levels, each slower and roomier than the one before:
+A cache that is this valuable and this large raises a storage question. An engine sets aside a share of the GPU's free memory for it. That share fills quickly, and then old entries have to be thrown out to make room. Every entry thrown out is a future request that has to read its prompt all over again.
 
-| Where | Roughly how fast | Roughly how big |
-| --- | --- | --- |
-| GPU memory | terabytes per second | tens to hundreds of GB |
-| Ordinary RAM beside the GPU | tens to hundreds of GB per second | hundreds of GB to terabytes |
-| A local SSD | 5 to 10 GB per second | terabytes |
-| Network storage | gigabytes per second | tens of terabytes |
+So the cache spills outward. The book describes four places to keep it, each slower to reach and much roomier than the one before: the GPU's own memory, the ordinary RAM of the machine the GPU sits in, a local SSD, and storage out on the network. The first moves terabytes a second and holds tens to hundreds of gigabytes. The last moves a few gigabytes a second and holds tens of terabytes.
 
 The idea is the same as any cache: keep what is used most where it is quickest to reach, and push the rest further out.
 
-It also changes how requests should be shared out between servers. If several copies of the model are running, a user's next message should go back to the copy that already holds their conversation. Sending it to whichever server is least busy means reading the whole conversation again from the start. This is called cache-aware routing, and it comes back in [chapter 12](/inference-engineering/autoscaling).
+It also changes how requests should be shared out between servers. If several copies of the model are running, a user's next message should go back to the copy that already holds their conversation. Sending it to whichever server is least busy means reading the whole conversation again from the start. This is called cache-aware routing, and it comes back in [chapter 13](/inference-engineering/autoscaling).
+
+The outermost level has a second use. A cache kept on network storage can be shared by every copy of the model, so a conversation is not lost when the server that held it is shut down.
 
 ## When the text gets very long
 

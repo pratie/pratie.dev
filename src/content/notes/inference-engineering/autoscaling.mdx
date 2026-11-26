@@ -4,7 +4,7 @@ short: Scaling up and down
 description: One fast server is not a service. Traffic rises and falls, a new machine takes minutes to become useful, and something has to decide how many to keep running.
 date: 2026-11-26
 series: inference-engineering
-chapter: 12
+chapter: 13
 book:
   - where: Section 7.1, Containerization (pp. 179–183)
     what: Images, layers, pinning dependencies, and NVIDIA's ready-made containers.
@@ -17,9 +17,9 @@ book:
 import CalcFig from '../../../components/figures/CalcFig.astro';
 import ScaleFig from '../../../components/figures/ScaleFig.astro';
 
-Eleven chapters in, I have one server running one model about as fast as it can go.
+Twelve chapters in, I have one server running one model about as fast as it can go.
 
-Then traffic doubles. Nothing from the last eleven chapters helps with that. The book says it sharply: this is not a GPU problem or a PyTorch problem. It is a systems problem, and it needs different tools.
+Then traffic doubles. Nothing from the last twelve chapters helps with that. The book says it sharply: this is not a GPU problem or a PyTorch problem. It is a systems problem, and it needs different tools.
 
 ## First, put it in a box
 
@@ -28,6 +28,8 @@ Before you can run ten copies of a server, you have to be able to make one copy 
 That is harder than it sounds. [The software stack](/inference-engineering/software-stack) is a tall tower of exact versions: this CUDA, that PyTorch, this build of the engine, these system libraries. The book describes these chains as long and fragile, and anyone who has tried to get a new model running will agree.
 
 A **container** freezes the whole tower into a single file, called an image. Start that image on any suitable machine and you get the same environment every time.
+
+Images are built in layers, so nobody starts from nothing. Each engine publishes a ready-made image for every release. NVIDIA goes further and publishes complete ones for popular models, called NIMs, with an engine already set up for a particular GPU. The book's advice is to build on an engine's own image, and to treat a NIM as a quick start or a worked example, because a finished product is hard to bend to your own needs.
 
 Two habits the book recommends, both learned the hard way by somebody:
 
@@ -59,7 +61,7 @@ That last one deserves a closer look.
 
 ## How many requests can share a replica?
 
-[Chapter 4](/inference-engineering/prefill-and-decode) showed that running requests together gets far more out of a GPU, at some cost to each person's speed. There are three ways to organise that sharing, and a bus is a good way to picture them.
+[Chapter 5](/inference-engineering/prefill-and-decode) showed that running requests together gets far more out of a GPU, at some cost to each person's speed. There are three ways to organise that sharing, and a bus is a good way to picture them.
 
 **Static batching** is a bus that leaves only when every seat is taken. Efficient, and miserable for whoever got on first.
 

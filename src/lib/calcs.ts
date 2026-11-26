@@ -41,13 +41,29 @@ const share = (part: number, whole: number) => (whole > 0 ? Math.min(1, part / w
 
 // ---------- hardware used by more than one calculator ----------
 
-/** Memory and memory bandwidth as printed on the spec sheets, per GPU. */
+/**
+ * Memory in GB, memory bandwidth in GB/s, and dense compute on 8-bit numbers in teraFLOPS,
+ * as printed on the spec sheets, per GPU. Compute roughly halves each time the bits double.
+ */
 export const GPUS = [
-  { name: 'L4', vram: 24, bandwidth: 300 },
-  { name: 'H100', vram: 80, bandwidth: 3350 },
-  { name: 'H200', vram: 141, bandwidth: 4800 },
-  { name: 'B200', vram: 192, bandwidth: 8000 },
+  { name: 'L4', vram: 24, bandwidth: 300, flops8: 242 },
+  { name: 'H100', vram: 80, bandwidth: 3350, flops8: 1979 },
+  { name: 'H200', vram: 141, bandwidth: 4800, flops8: 1979 },
+  { name: 'B200', vram: 192, bandwidth: 8000, flops8: 5000 },
 ];
+
+/** GPT-2 small's published dimensions. */
+export const GPT2 = { vocab: 50257, context: 1024, width: 768, layers: 12, heads: 12 };
+
+/** Where a GPT-2 keeps its weights, worked out from its dimensions. Biases are counted with their matrices. */
+export function gptWeights({ vocab, context, width, layers } = GPT2) {
+  const attention = layers * (3 * width * width + 3 * width + width * width + width);
+  const mlp = layers * (4 * width * width + 4 * width + 4 * width * width + width);
+  const norms = (2 * layers + 1) * 2 * width;
+  const tokens = vocab * width;
+  const positions = context * width;
+  return { mlp, attention, tokens, positions, norms, total: mlp + attention + tokens + positions + norms };
+}
 
 /** Keys plus values per token per layer, in numbers, for a few real models. */
 export const KV_MODELS = [
@@ -144,6 +160,34 @@ function ceiling(v: Values): Result {
       : roomy
         ? `It fits with room to work. Reading ${gigabytes(weights)} once per token at ${count(gpu.bandwidth / 1000, 2)} TB/s allows at most ${count(tps, tps < 10 ? 1 : 0)} tokens a second for a single stream.`
         : `It loads, but less than half the weights' size is left over for the KV cache, so long prompts and batches will run out of memory.`,
+  };
+}
+
+/**
+ * Which of a chip's two limits a pass runs into. At 16 bits a weight is two bytes, and each token
+ * in the pass uses it for one multiplication and one addition, so a pass over n tokens needs
+ * about n operations for every byte of weights it fetches.
+ */
+function balance(v: Values): Result {
+  const gpu = GPUS[v.gpu];
+  const supply = ((gpu.flops8 / 2) * 1000) / gpu.bandwidth;
+  const demand = v.tokens;
+  const compute = share(demand, supply);
+  const memory = share(supply, demand);
+  const percent = (x: number) => `${count(x * 100, x < 0.1 ? 1 : 0)}%`;
+  return {
+    rows: [
+      { label: `What one ${gpu.name} can do for each byte it fetches`, text: `${count(supply)} operations` },
+      { label: 'What this pass needs for each byte', text: `${count(demand)} operation${demand === 1 ? '' : 's'}` },
+      { label: 'Arithmetic in use', text: percent(compute), bar: compute, tone: compute >= 1 ? 'pen' : undefined },
+      { label: 'Memory speed in use', text: percent(memory), bar: memory, tone: memory >= 1 ? 'pen' : undefined },
+    ],
+    answer:
+      Math.abs(demand - supply) < supply * 0.03
+        ? `This is the balance point for this chip. The arithmetic and the memory are both fully used, and neither is waiting for the other.`
+        : demand < supply
+        ? `Memory is the limit. The chip finishes its sums and waits for the next weights, so ${percent(compute)} of its arithmetic is in use. The two limits meet at about ${count(supply)} tokens in one pass.`
+        : `Arithmetic is the limit. The weights arrive faster than the chip can use them, so ${percent(memory)} of its memory speed is in use. The two limits meet at about ${count(supply)} tokens in one pass.`,
   };
 }
 
@@ -275,6 +319,7 @@ export const calcs: Record<string, (v: Values) => Result> = {
   breakeven,
   latency,
   ceiling,
+  balance,
   kvsize,
   speculate,
   gpucount,

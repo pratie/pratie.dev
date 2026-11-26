@@ -4,14 +4,14 @@ short: Prefill and decode
 description: A model reads your whole prompt in one go and then writes its answer one token at a time. The two phases are slow for different reasons, and that explains most of what follows.
 date: 2026-11-26
 series: inference-engineering
-chapter: 4
+chapter: 5
 book:
-  - where: Section 2.2, LLM Inference Mechanics (pp. 46–55)
-    what: Prefill and decode, the chat template, sampling settings, architecture names, Mixture of Experts.
+  - where: Sections 2.2.3 and 2.2.4 (pp. 52–54)
+    what: Why attention gets more expensive as the text grows, and how Mixture of Experts models route each token.
   - where: Section 2.4, Calculating Inference Bottlenecks (pp. 61–67)
-    what: The ops-to-byte ratio, arithmetic intensity, the roofline chart, and a worked example for attention.
+    what: The ops-to-byte ratio, arithmetic intensity, the roofline chart, and a full worked example for attention.
   - where: Section 2.5, Optimizing Attention (pp. 67–69)
-    what: FlashAttention, PagedAttention, and attention variants that scale better than the standard one.
+    what: FlashAttention, PagedAttention, the cheaper variants of attention, and models that do without it.
 ---
 
 import BarsFig from '../../../components/figures/BarsFig.astro';
@@ -20,10 +20,19 @@ import phases from '../../../data/bench/phases.json';
 import membw from '../../../data/bench/membw.json';
 import batching from '../../../data/bench/batching.json';
 import ttft from '../../../data/bench/ttft.json';
+import compute from '../../../data/bench/compute.json';
+import spec from '../../../data/bench/spec.json';
 import { span, count, GPUS } from '../../../lib/calcs';
 
 export const mid = phases[1];
 export const best = batching.reduce((a, b) => (b.total_tps > a.total_tps ? b : a));
+export const biggest = batching[batching.length - 1];
+// my laptop: operations it can do for each byte it can fetch
+export const laptopRatio = compute.matmul_gflops / membw.read_gbs;
+// GPT-2 is stored in 32-bit numbers: two operations for every four bytes, per token in the pass
+export const laptopMeet = laptopRatio / 0.5;
+// tokens a second if both limits were reached at once: all the arithmetic, spent on two operations per weight
+export const laptopRoof = (compute.matmul_gflops * 1e9) / (2 * spec.target_params);
 
 Two things about model APIs look odd until you know what is underneath. The first word of an answer takes noticeably longer than the words after it. And output tokens cost several times more than input tokens.
 
@@ -80,7 +89,7 @@ Prefill is the second kitchen. There is plenty to chop for every crate, so the c
 
 Decode is the first kitchen. A whole pantry is carried in to make one sandwich. The carrying is the limit. That is **memory bound**.
 
-There is a proper measure behind the picture, called **arithmetic intensity**: how many operations you do for each byte you fetch. Every chip has its own balance point. The book works this out for an H100 GPU, which can do about 295 operations in the time it takes to move one byte, and then counts the operations in a decode step of attention and gets about 62. Decode asks for far fewer operations per byte than the chip could supply, so the chip's compute sits partly idle, waiting for memory.
+How lopsided are the two kitchens? There is a way to put a number on it, and I come to it [further down](#where-do-the-two-limits-meet), once batching is on the table.
 
 ## Can I see that on my own laptop?
 
@@ -126,7 +135,7 @@ The same sum works for datacenter hardware.
 
 </CalcFig>
 
-A 70-billion-parameter model at 16 bits per weight is 140 GB. It only just squeezes onto the H200, with almost nothing left over, and tops out near 34 tokens a second for one stream. Halve the bits and it fits easily and the ceiling doubles. That is a preview of [chapter 7](/inference-engineering/quantization).
+A 70-billion-parameter model at 16 bits per weight is 140 GB. It only just squeezes onto the H200, with almost nothing left over, and tops out near 34 tokens a second for one stream. Halve the bits and it fits easily and the ceiling doubles. That is a preview of [chapter 8](/inference-engineering/quantization).
 
 ## Using the compute that sits idle
 
@@ -150,6 +159,44 @@ With {best.batch} requests sharing each pass, the laptop produces {best.total_tp
 
 Two things to notice. Each person gets fewer tokens per second as the batch grows, because a pass with more in it takes longer. That is the latency for throughput trade from [chapter 2](/inference-engineering/know-your-workload), in numbers. And the last rows fall off a cliff. At some batch size the cook becomes the limit after all, and adding more work only makes everything slower. On a two-core laptop that happens early. On a GPU it happens much later, but it does happen.
 
+## Where do the two limits meet?
+
+How much later? This can be worked out, and it is the one piece of real theory in this chapter.
+
+Every chip has a ratio: how many arithmetic operations it can do in the time it takes to fetch one byte. The book calls it the ops-to-byte ratio. An H100 can do about 989 trillion operations a second on 16-bit numbers, and fetch 3,350 billion bytes a second. Divide one by the other and you get 295 operations for every byte.
+
+Every job has a matching number: how many operations it needs for each byte it has to fetch. That one is called **arithmetic intensity**.
+
+Put the two side by side. If the job needs fewer operations per byte than the chip can supply, the arithmetic finishes early and the chip waits for memory. That is memory bound. If it needs more, the bytes arrive and queue up for the arithmetic. That is compute bound.
+
+So what does a pass through a language model need? Here is the roughest version of the sum. Take one weight, stored in 16 bits. That is two bytes to fetch. For each token going through, the weight takes part in one multiplication and one addition. Two operations for two bytes. So a pass needs about one operation per byte for each token in it.
+
+- Decode for one person is one token per pass. It needs about 1 operation per byte, on a chip that can supply 295.
+- Thirty-two people decoding together is 32 tokens per pass. It needs about 32.
+- Prefill of a 2,000-token prompt needs about 2,000.
+
+<CalcFig
+  calc="balance"
+  inputs={[
+    { id: 'gpu', label: 'GPU', value: 1, options: GPUS.map((gpu, i) => ({ label: gpu.name, value: i })) },
+    { id: 'tokens', label: 'Tokens going through in one pass', min: 1, max: 2000, value: 1 },
+  ]}
+>
+
+**One pass, held against both limits.** A rough model, at 16 bits per weight, that only counts multiplying by the weights. The compute figures are the ones in the book's tables. It starts at 1 token, which is decode for a single user. Drag it upward.
+
+</CalcFig>
+
+That is this whole chapter in one figure. Writing for one user keeps a third of one percent of the chip's arithmetic busy. Reading a long prompt uses all of it. And the two limits meet at a few hundred tokens per pass, which is why adding a few dozen requests to a batch is nearly free and adding thousands is not.
+
+Real passes are messier than my sum. The book works a proper example for attention alone, counting every read, every write and every operation over a 4,096-token text, and arrives at 62 operations per byte against the H100's 295. That is a different number from mine and the same verdict: decode is memory bound. It also says, fairly, that this is an exercise for building intuition and not something inference engineers do every day.
+
+The usual picture for all this is called a **roofline** chart: a sloping line where memory is the limit, meeting a flat line where compute is. The calculator above is that chart without the drawing.
+
+Does the sum hold on my laptop? In its best run it did {count(compute.matmul_gflops)} billion operations a second on a large matrix multiplication, and earlier I measured it fetching {membw.read_gbs} GB a second. That is {count(laptopRatio)} operations per byte. GPT-2 is stored in 32-bit numbers, four bytes a weight, so each token in a pass needs half an operation per byte. The two limits should meet at about {count(laptopMeet)} requests per pass.
+
+Now look back at the batching bars. Throughput did stop growing around there: it peaked at {best.batch} requests and fell at {biggest.batch}. So the sum finds the right neighbourhood. It also shows how far my setup is from the roof. A machine sitting exactly on both limits would write about {count(laptopRoof)} tokens a second at that point, and mine managed {best.total_tps}. The roof tells you where the limits are. It does not promise that your software reaches them. Closing that gap is what [chapter 7](/inference-engineering/software-stack) is about.
+
 ## What each phase decides
 
 This gives the two numbers that the next chapter is about.
@@ -164,15 +211,17 @@ That growth is where a lot of research goes. Three ideas from the book are worth
 
 - **FlashAttention** computes exactly the same attention, arranged so that intermediate results never leave the chip's fast on-board memory. Same answer, fewer trips to the pantry.
 - **PagedAttention** stores what attention needs to remember in small fixed-size blocks, so memory can be handed out and reclaimed without leaving unusable gaps.
-- Cheaper kinds of attention, such as only looking back a fixed distance, change the maths itself. These have to be built in when the model is trained.
+- Cheaper kinds of attention change the maths itself. Sliding window attention only looks back a fixed distance, often several thousand tokens. Others squeeze the older part of the text into a summary, or swap the exact calculation for an approximation. They give up a little quality, and they have to be built in when the model is trained.
+
+A few models go a step further and replace attention in some of their layers with a different mechanism, one whose cost grows in a straight line with the length of the text. The book mentions Mamba as the best known, and says mixtures of the two kinds of layer are becoming more common.
 
 What attention needs to remember is called the KV cache, and it gets [a chapter of its own](/inference-engineering/kv-cache).
 
 ## Two exceptions worth knowing
 
-Not every model reads all of its weights for every token. A **Mixture of Experts** model splits its big layers into many smaller "experts" and sends each token through only a few. The book's example is a Qwen model with 235 billion parameters of which 22 billion are used for any one token. For a single user that is a large saving. On a busy server, different requests wake different experts, so in practice nearly all the weights stay in use.
+Not every model reads all of its weights for every token. A **Mixture of Experts** model splits its big layers into many smaller "experts" and sends each token through only a few. The choice is made again at every layer, by a tiny router inside the model. The book's example is a Qwen model with 235 billion parameters. Each of its layers has 128 experts, a token goes through 8 of them, and about 22 billion parameters end up being used for any one token. For a single user that is a large saving. On a busy server, different requests wake different experts, so in practice nearly all the weights stay in use.
 
-And image and video models do not write token by token at all. They start from noise and refine the whole picture over a few dozen steps, with every step working on the entire image. That makes them compute bound, like prefill. They come back in [chapter 11](/inference-engineering/other-modalities).
+And image and video models do not write token by token at all. They start from noise and refine the whole picture over a few dozen steps, with every step working on the entire image. That makes them compute bound, like prefill. They come back in [chapter 12](/inference-engineering/other-modalities).
 
 ## Where this leaves us
 

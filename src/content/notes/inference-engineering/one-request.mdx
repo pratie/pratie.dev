@@ -1,0 +1,164 @@
+---
+title: One request, start to finish
+short: One request
+description: Before asking where the time goes, follow a single request through the server. Most of the steps are bookkeeping. Two of them are the model, and those are the two that cost.
+date: 2026-11-26
+series: inference-engineering
+chapter: 4
+book:
+  - where: Section 2.1, Neural Networks (pp. 42–46)
+    what: Layers and hidden states, encoders and decoders, linear layers as matrix multiplication, and why activation functions are needed.
+  - where: Section 2.2, LLM Inference Mechanics (pp. 46–49)
+    what: Tokens and vocabularies, the three sequences, the chat template, logits, the sampling settings and the stop token.
+  - where: Sections 2.2.1 and 2.2.2 (pp. 49–52)
+    what: How to read an architecture name and a config file, and the three kinds of layer inside a language model.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import Pipeline from '../../../components/figures/Pipeline.astro';
+import TemplateFig from '../../../components/figures/TemplateFig.astro';
+import templates from '../../../data/bench/templates.json';
+import spec from '../../../data/bench/spec.json';
+import { count, GPT2, gptWeights } from '../../../lib/calcs';
+
+export const qwen = templates.models[0];
+export const w = gptWeights();
+export const pct = (x) => `${count((x / w.total) * 100, x / w.total < 0.01 ? 2 : 0)}%`;
+
+The last chapter ended on a question. Why is the first token slow and the rest quick?
+
+To answer it, I need to know what the server actually does with a request. From the outside there is not much to see. I send a list of messages and text comes back. So what happens in between?
+
+Six things, it turns out. Four of them are bookkeeping. Two of them are the model.
+
+<Pipeline
+  label="What happens to one request"
+  steps={[
+    { label: 'your messages', sub: 'a list' },
+    { label: 'one string', sub: 'the chat template', href: '#the-model-only-takes-one-string' },
+    { label: 'tokens', sub: 'the tokenizer', href: '#then-it-becomes-numbers' },
+    { label: 'prefill', sub: 'the model reads', href: '#the-two-steps-that-use-the-model' },
+    { label: 'decode', sub: 'the model writes, a token a pass', href: '#picking-each-token' },
+    { label: 'text again', sub: 'sent as it is made', href: '#back-to-text' },
+  ]}
+/>
+
+## The model only takes one string
+
+I send a list: a system message, a user message, sometimes the description of a tool. But a model was trained on one thing only, a long run of tokens. It has no slot for "the system message".
+
+So the first job is to flatten my list into a single string, with markers in it that say who said what. The recipe for doing that is called the **chat template**, and every family of models has its own.
+
+Here are the same two messages after two real templates have been at them.
+
+<TemplateFig>
+
+**From the tokenizers of two open models.** Yellow is what the template added. The bent arrows are line breaks, which are part of the format too.
+
+</TemplateFig>
+
+Three things are worth noticing.
+
+The markers are different. Each model learned in training that one particular set of markers means "a new speaker starts here". Give it another model's markers and nothing fails. The model still answers. It answers worse, because the text no longer looks like what it was trained on. The book flags the template as something an inference engine has to implement correctly for every model, and it is the kind of mistake no error message will report.
+
+The template costs tokens. My two messages are {qwen.content_tokens} tokens long. With Qwen's template around them, the model reads {qwen.tokens}.
+
+And the string stops in the middle of things, right after the marker for the assistant's turn. That is on purpose. [A language model continues text](/notes/how-llms-work#the-loop). The template sets the page up so that the natural thing to write next is the assistant's answer.
+
+GPT-2, the model I measure throughout this series, has no chat template at all. It is a **base model**: it continues whatever text it is given. A chat model is the same kind of network, trained further on conversations written in one fixed format. You will see the two offered side by side as the "base" and "instruct" versions of one model.
+
+## Then it becomes numbers
+
+The string is cut into tokens and each token is replaced by its number. [The basics note](/notes/how-llms-work#tokens) covers how the cutting works. What matters here is that it is a lookup in a table. No neural network is involved, so it is quick.
+
+The table is the model's **vocabulary**. GPT-2's has {count(GPT2.vocab)} entries and Qwen's has {count(qwen.vocab)}. The book makes a practical point about this: a tokenizer that needs fewer tokens for the same text makes everything after it faster, because every token saved is a pass through the model saved.
+
+## Three sequences, one budget
+
+From the server's side, a request is three runs of tokens.
+
+- The **input sequence** is everything that came in: the system prompt, the conversation so far, any documents and tool descriptions, all flattened by the template.
+- The **reasoning sequence** is optional. Some models think on paper before they answer. Those tokens are written one at a time like any others and take just as long, whether or not you are shown them.
+- The **output sequence** is the answer.
+
+All three have to fit in the **context window**, the most tokens the model can handle in one request. A request can also put a ceiling on the output with a setting usually called `max_tokens`.
+
+I spell this out because these lengths are what the cost is made of. The input sequence is read once. Every token of reasoning and output is a separate pass through the model. You will see the two lengths written as ISL and OSL, for input and output sequence length, and [a benchmark that gets them wrong](/inference-engineering/latency-and-throughput#measuring-honestly) is measuring a different product from yours.
+
+## The two steps that use the model
+
+Now the model gets involved, twice.
+
+**Prefill.** All the input tokens go through the model together, in one pass. Along the way the model stores what its attention layers will need later, so it never has to work that out again.
+
+**Decode.** The model writes. One pass produces one token, that token joins the end of the sequence, and the model goes again.
+
+These two steps take nearly all of the time and nearly all of the hardware. [The next chapter](/inference-engineering/prefill-and-decode) is entirely about them, so here I will only finish the loop.
+
+## Picking each token
+
+A pass through the model does not end in a token. It ends in a list of scores, one for every entry in the vocabulary. These are the **logits**. [Softmax](/notes/gpt-from-scratch#softmax) turns them into probabilities, and the next token is drawn at random according to those probabilities.
+
+Three settings bend that draw, and a request can set any of them:
+
+- **Temperature** sharpens or flattens the scores before they become probabilities.
+- **Top-k** keeps only the k most likely tokens.
+- **Top-p** keeps the smallest group of tokens whose probabilities add up to p.
+
+Turn any of them down and the output gets more predictable. At a temperature of 0, or a top-k of 1, the model always takes its first choice. [The basics note has a sampler to play with](/notes/how-llms-work#probabilities).
+
+Why would an inference engineer care? Two reasons. This work is repeated for every single token, so it has to be cheap. And the settings change performance, not only style. A more random draw is harder to predict, which matters for [speculative decoding](/inference-engineering/speculative-decoding), a technique that works by guessing ahead.
+
+Sometimes the draw is not allowed to be free at all. If the answer has to be valid JSON, because some program is going to read it, the server steps in between the scores and the draw. At each position it works out which tokens would break the format and pushes their scores down so far that they cannot be picked. After `{"city":` the only tokens left standing are the ones that can begin a value. Adjusting the scores like this is called logit biasing. It is how **structured output** and tool calls are made dependable, and the book is firm that an engine has to get it right.
+
+And the loop needs a way to end. One entry in the vocabulary means "I am done". When the model picks that **stop token**, the server stops. In the figure above it is the marker that closes each turn. If the model never picks it, the limit on output tokens or the edge of the context window ends things.
+
+## Back to text
+
+Each token's number is turned back into its piece of text and sent to the user straight away, without waiting for the rest. That is **streaming**, and it is why [the last chapter](/inference-engineering/latency-and-throughput) needed two measurements: one for the wait before the first piece, and one for the pace of the pieces after it.
+
+## What is inside the model
+
+That is the whole request. Before moving on, a short look at the thing in the middle, because the next few chapters keep pointing at its parts.
+
+A language model has three kinds of layer. An **embedding layer** at the bottom swaps each token for a vector. A tall stack of **transformer blocks** in the middle does the work, and each block is [a round of attention followed by a small network called an MLP](/notes/how-llms-work#the-blocks). An **output layer** at the top turns the final vector into the logits.
+
+Nearly all of it is one operation. A **linear layer** takes a vector, multiplies it by a grid of weights and adds a few more numbers. That is a matrix multiplication. Between the linear layers sit **activation functions**, tiny operations that bend each number. They are there because two matrix multiplications in a row are no more powerful than one. Convert pounds to kilograms and then kilograms to grams, and you could have gone from pounds to grams in a single step. The bend in between is what makes a hundred layers worth more than one. [The from-scratch note](/notes/gpt-from-scratch#the-mlp) shows one with small numbers.
+
+So where are the weights? I counted GPT-2's.
+
+<BarsFig
+  label={`Where GPT-2 small keeps its ${count(w.total / 1e6)} million weights`}
+  rows={[
+    { label: `The MLPs, in all ${GPT2.layers} blocks`, value: w.mlp, text: pct(w.mlp), tone: 'pen' },
+    { label: 'The token table, used at both ends', value: w.tokens, text: pct(w.tokens) },
+    { label: `Attention, in all ${GPT2.layers} blocks`, value: w.attention, text: pct(w.attention) },
+    { label: 'Positions', value: w.positions, text: pct(w.positions) },
+    { label: 'Normalisation', value: w.norms, text: pct(w.norms) },
+  ]}
+  max={w.total}
+>
+
+**Worked out from GPT-2's published dimensions.** The parts add up to {count(w.total)} weights. The model itself, loaded and counted, reports {count(spec.target_params)}.
+
+</BarsFig>
+
+The book's general statement is that the MLPs hold most of a language model's weights, attention comes second, and everything else is a rounding error. GPT-2 nearly fits that. Its token table looks large only because the model around it is so small. In a much bigger model the blocks grow far faster than the table does, and the table's share shrinks to a few percent.
+
+This matters for what comes next. A pass through the model is mostly a long series of multiplications by the big matrices in those blocks. Whatever makes that multiplication slow makes the model slow.
+
+Two more words, because they come back later. An **encoder** is a network that reads an input and turns it into an internal form. A **decoder** is one that writes an output. Today's language models are decoders only. Some other kinds of model, like [the speech recogniser in chapter 12](/inference-engineering/other-modalities#speech-to-text), have one of each. And the vectors that pass from one layer to the next are called **hidden states**. [One of the guessing methods in chapter 9](/inference-engineering/speculative-decoding#where-the-guesses-come-from) works by reading them.
+
+## Reading the label
+
+Every open model ships with a small file called `config.json` that describes its shape. GPT-2's says {GPT2.layers} layers, {GPT2.heads} attention heads, vectors of {GPT2.width} numbers, a context of {count(GPT2.context)} tokens and a vocabulary of {count(GPT2.vocab)}.
+
+Near the top of that file is the name of the **architecture**. GPT-2's is `GPT2LMHeadModel`: the GPT-2 design with a language-modelling head, which is another name for the output layer. Newer names tend to end in `ForCausalLM`. "Causal" means the model predicts the next token from the ones before it, as every language model in this series does. Some names have `Moe` in the middle. That one is explained [in the next chapter](/inference-engineering/prefill-and-decode#two-exceptions-worth-knowing).
+
+The architecture is worth knowing because it is what the software supports. An inference engine does not know about individual models. It knows about architectures. Get one model of an architecture running fast and the rest of the family comes along: the other sizes, the base and instruct versions, and any fine-tune, since [fine-tuning](/inference-engineering/know-your-workload#the-cheapest-speed-up-is-a-smaller-model) changes the weights and leaves the shape alone. That includes LoRA, a popular way to fine-tune by adding a small set of extra weights beside the original ones.
+
+## Where this leaves us
+
+A request is flattened into one string, cut into tokens, read by the model, written by the model one token at a time, and turned back into text as it goes. The template, the tokenizer and the draw are bookkeeping. They are cheap, and they have to be exactly right, because a mistake there fails quietly.
+
+The reading and the writing are the model, and that is where the time goes. They also turn out to be slow for two different reasons.

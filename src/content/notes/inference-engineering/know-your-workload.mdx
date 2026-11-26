@@ -81,17 +81,14 @@ If none of these is true yet, the API is cheaper and it is less work.
 
 ## What kind of thing are you building?
 
-The right target depends heavily on the product. A few examples make this concrete.
+The right target depends heavily on the product. One way to sort products is by what the person on the other end is waiting for.
 
-| Product | What "fast" means there |
-| --- | --- |
-| Chat | The first word must appear quickly. After that, reading speed is enough. |
-| Voice conversation | The whole round trip, hearing to speaking, has to feel like a person. |
-| Agent | One click can mean fifty model calls. Only the total matters. |
-| Tab completion | The whole suggestion has to land between two keystrokes. |
-| Overnight document processing | Nobody is waiting. Only the cost per document matters. |
+- **The first word.** In a chat, the answer is read as it arrives, so the wait before it starts is what people notice.
+- **The whole answer.** A code completion is no use until all of it is there, and it has to land between two keystrokes. An agent is the same thing many times over: one click can set off fifty model calls, and only the total counts.
+- **The reply.** In a voice conversation, the gap between the end of your sentence and the start of the answer has to feel like talking to a person.
+- **Nothing.** Overnight document processing has nobody waiting at all. Only the cost per document matters.
 
-The last row is a different animal from the others, and the book gives the split a name. **Online** work has a person waiting on every request, so you tune for latency. **Offline** work has no one waiting, so you pack the GPU as full as it will go and tune for throughput.
+The last one is a different animal from the others, and the book gives the split a name. **Online** work has a person waiting on every request, so you tune for latency. **Offline** work has no one waiting, so you pack the GPU as full as it will go and tune for throughput.
 
 One model can be used both ways. Transcribing a live call and transcribing last year's recordings can use the very same weights. If there is enough of both, the book's advice is to run two separate deployments, each tuned for its own job, instead of one that is mediocre at both.
 

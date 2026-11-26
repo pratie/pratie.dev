@@ -2,10 +2,11 @@
 //
 //   npm run build && node scripts/smoke.mjs
 //
-// For every page in dist/ it: checks that each internal link and #anchor exists; loads the page
-// in jsdom; runs the page's scripts; presses every button, moves every slider and types in every
-// text box inside a figure; and fails if anything throws or a figure prints "undefined".
-// It cannot see layout. It only proves the figures run.
+// For every page in dist/ it: checks that each internal link and #anchor exists, and that a link
+// saying "chapter 7" points at the seventh chapter; loads the page in jsdom; runs the page's
+// scripts; presses every button, moves every slider and types in every text box inside a figure;
+// and fails if anything throws or a figure prints "undefined".
+// It cannot see layout. It only proves the links hold and the figures run.
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -42,6 +43,23 @@ for (const page of pages) {
     const target = (path || page.route).replace(/\/$/, '') || '/';
     if (!ids.has(target)) problems.push(`${page.route}: link to missing page ${href}`);
     else if (anchor && !ids.get(target).has(decodeURIComponent(anchor))) problems.push(`${page.route}: link to missing anchor ${href}`);
+  }
+}
+
+// ---------- chapter numbers ----------
+// The rail on every page lists each chapter with its number, so it is the source of truth.
+// Inserting or moving a chapter must not leave "chapter 5" pointing at what is now chapter 6.
+const numbers = new Map();
+for (const page of pages) {
+  for (const [, href, n] of page.html.matchAll(/<a href="([^"]+)"[^>]*><span class="num"[^>]*>(\d+)<\/span>/g)) numbers.set(href, Number(n));
+}
+let numbered = 0;
+for (const page of pages) {
+  for (const [, href, text] of page.html.matchAll(/<a href="([^"#]+)(?:#[^"]*)?"[^>]*>([^<]*)<\/a>/g)) {
+    const said = /\bchapter (\d+)\b/i.exec(text);
+    if (!said || !numbers.has(href)) continue;
+    numbered++;
+    if (numbers.get(href) !== Number(said[1])) problems.push(`${page.route}: "${text}" links to ${href}, which is chapter ${numbers.get(href)}`);
   }
 }
 
@@ -158,4 +176,4 @@ if (problems.length) {
   console.error(`\n${problems.length} problem(s):\n` + problems.map((p) => `  - ${p}`).join('\n'));
   process.exit(1);
 }
-console.log(`\n${pages.length} pages, all links resolve, every figure ran.`);
+console.log(`\n${pages.length} pages, all links resolve, ${numbered} chapter numbers point at the right chapter, every figure ran.`);

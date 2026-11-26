@@ -4,14 +4,14 @@ short: Other kinds of model
 description: Everything so far was about language models. Most other models turn out to be one of two kinds, and once you know which kind, you already know roughly how it will behave.
 date: 2026-11-26
 series: inference-engineering
-chapter: 11
+chapter: 12
 book:
   - where: Section 2.3, Image Generation Inference Mechanics (pp. 55–61)
     what: How denoising models work, latent space, few-step models and video generation.
   - where: Sections 6.1 and 6.2 (pp. 156–162)
-    what: Vision language models and embedding models.
+    what: Vision language models, models with several kinds of input and output, and the two designs of embedding model.
   - where: Sections 6.3 and 6.4 (pp. 162–169)
-    what: Speech recognition and speech synthesis, live and in bulk.
+    what: Speech recognition and speech synthesis, live and in bulk, and working out who is speaking.
   - where: Sections 6.5 and 6.6 (pp. 169–176)
     what: Optimising image and video generation, including guidance, caching and context parallelism.
 ---
@@ -20,7 +20,7 @@ import CalcFig from '../../../components/figures/CalcFig.astro';
 
 Up to here, everything has been text in and text out.
 
-You might expect each other kind of model to need its own set of ideas: one for speech, another for images, another for video. Mostly, they do not. Nearly every generative model is one of two kinds, and [chapter 4](/inference-engineering/prefill-and-decode) already tells you how each kind behaves.
+You might expect each other kind of model to need its own set of ideas: one for speech, another for images, another for video. Mostly, they do not. Nearly every generative model is one of two kinds, and [chapter 5](/inference-engineering/prefill-and-decode) already tells you how each kind behaves.
 
 ## Two families
 
@@ -44,11 +44,15 @@ That is the whole trick, and it has one consequence. The book's rule of thumb is
 
 So to the language model, a picture is a very long prompt. All the costs are the costs of long prompts: a slow first token and a large [KV cache](/inference-engineering/kv-cache). Every technique for long prompts helps, and prefix caching helps most, because people tend to ask several questions about the same image.
 
-Video makes this extreme. At 24 frames a second and a thousand tokens a frame, four seconds of video would be close to a hundred thousand tokens. Nobody does that. The frames are thinned out and shrunk first. That gives a new dial that language models do not have: how much of the picture to throw away before the model sees it.
+Video makes this extreme. At 24 frames a second and a thousand tokens a frame, four seconds of video would be close to a hundred thousand tokens. Nobody does that. The frames are thinned out and shrunk first. That gives a new dial that language models do not have: how much of the picture to throw away before the model sees it. A picture can be turned into tokens at more than one resolution, and the book puts the detailed version at about four times the tokens of the coarse one.
+
+These models are part of a wider move toward models that take several kinds of input and produce several kinds of output, sometimes called omni models. The book is measured about them. One model that does everything is convenient. A small model built for one job is often faster and better at it. Reading the text in an image is its example: models built only for that are a fraction of the size and still do it more accurately. So a production system around a vision model usually ends up as a chain, with small specialists pulling text out of PDFs, pictures and audio, and feeding one big generalist. Each link has to be made fast and scaled by itself.
 
 ## Embedding models
 
 An embedding model turns a piece of text into one vector that captures its meaning, so that similar texts land close together. Search, retrieval and recommendations are built on this.
+
+There are two designs. The older ones are small networks in the style of a model called BERT, usually under a billion parameters, and they are [encoders](/inference-engineering/one-request#what-is-inside-the-model): built to read and nothing else. The newer ones are ordinary language models, up to about 8 billion parameters, turned to producing a vector instead of a next token. Those are much more capable. Either way, what comes out is a list of a few hundred to a few thousand numbers.
 
 What struck me is that it only reads. It never writes a single token. So there is no decode, and most of the toolbox simply does not apply. No speculation, no cache to carry between tokens, nothing to disaggregate. The models are small, so there is no point splitting one across GPUs either.
 
@@ -57,6 +61,8 @@ What is left is throughput. An embedding model can take dozens or hundreds of te
 The book also points out that these models get two very different kinds of traffic: huge background jobs that embed millions of documents, and single live lookups where someone is waiting. That is the online and offline split from [chapter 2](/inference-engineering/know-your-workload), and the advice is the same. If you have both, run them separately.
 
 One practical tip I liked. After quantizing an embedding model, checking quality is easy: embed the same texts with both versions and compare the vectors. The book's bar is at least 99% similarity.
+
+Two smaller things to know. Many newer models are trained so that you can cut the vector short and keep most of its meaning, which saves storage and search time later on. And vectors from two different models cannot be compared with each other, even when they are the same length.
 
 ## Speech to text
 
@@ -69,6 +75,10 @@ What "fast" means depends entirely on the use.
 **Live speech.** Someone is dictating or talking to a voice agent. What matters is the round trip for one short piece of audio, and the book suggests aiming for about 200 milliseconds. The surprising part is where the gains come from. The model is already quick, so the work is around it: keeping one connection open and streaming audio through it, and using a tiny extra model to notice pauses, so the audio is cut between words and never in the middle of one.
 
 **Long recordings.** Nobody is waiting on each sentence. Whisper only takes about thirty seconds of audio at a time, so an hour-long recording is cut into pieces at the silences, the pieces are transcribed at the same moment on as many GPUs as you have, and the text is stitched together afterwards. Speed here is measured as how many times faster than real time it runs. The book's figure for a well-tuned setup is an hour of audio in under four seconds.
+
+Cutting a recording up has a cost: each piece is transcribed without knowing what came before it. The book's fix is to check the output. A transcript that repeats itself, or has an impossible number of words per minute, is a sign that the model lost the thread. That piece is run again, sometimes cut smaller.
+
+A neighbouring job is working out who is speaking when, called **diarization**. It is done by a separate chain of older-style models that pick out voices and group them, and the book says it takes at least twice as long as the transcription itself.
 
 ## Text to speech
 
@@ -94,13 +104,13 @@ Three details from the book make this click.
 
 It does not work on pixels. A 1024 by 1024 image is over a million pixels, far too many to process again at every step. The model works on a much smaller grid, called the **latent space**, with about one percent as many values, and a separate small model turns the result into pixels at the end.
 
-It is a pipeline, not one model. One part reads the text prompt. One part does the denoising. One part converts to pixels.
+It is a pipeline, not one model. One part reads the text prompt. One part does the denoising. One part converts to pixels. Their names are the text encoder, the denoiser, and the variational autoencoder, or VAE. The denoiser uses attention as a language model does, plus a second kind called cross-attention, in which the picture looks at the words of the prompt.
 
 And each step runs the denoiser twice: once following the prompt and once ignoring it. The two results are blended, and how strongly the prompt wins is a setting called guidance. So 50 steps are really 100 passes through the model.
 
 Every one of those passes works on the whole image, which is why this is limited by compute. Fetching is not the problem. The work is.
 
-So how do you make it faster? You can use better kernels and compile the model for your exact GPU, as in [chapter 6](/inference-engineering/software-stack). You can use a model that was trained to need only a handful of steps, at some cost in quality. And then there is a trick the book describes that I enjoyed.
+So how do you make it faster? You can use better kernels and compile the model for your exact GPU, as in [chapter 7](/inference-engineering/software-stack). The book adds a wrinkle here: these models are compute bound in theory, but the sample code is often so careless with memory that it never gets as far as that limit, and fixing the memory use comes first. You can also use a **few-step** model, one trained to get there in eight steps or fewer. The book puts these at 80 to 90 percent faster, with visibly lower quality, which suits things like live camera filters. And then there is a trick the book describes that I enjoyed.
 
 The early steps decide the layout of the picture. The later steps only fill in detail. A model halfway through drawing a cat is not going to change its mind and draw a dog. So the prompt matters most at the start, and you can stop running the second, prompt-following pass for the later steps.
 
@@ -130,8 +140,8 @@ That last fact changes the economics. With language models you can always trade 
 The book's tools for that are familiar ideas in new shapes:
 
 - **Caching between steps.** Parts of one step's work can be reused in the next. The book says this can make generation 30 to 40 percent faster, and that it ranges from harmless to ruinous, so it needs careful testing.
-- **Quantizing attention, selectively.** Risky, as [chapter 7](/inference-engineering/quantization) explained. So it is done only on the later steps and the middle layers, where errors matter least.
-- **A different way of sharing GPUs.** Instead of cutting the weights across the eight GPUs, every GPU gets a full copy of the model, which is small, and the enormous attention calculation is what gets split up.
+- **Quantizing attention, selectively.** Risky, as [chapter 8](/inference-engineering/quantization) explained. So it is done only on the later steps and the middle layers, where errors matter least.
+- **A different way of sharing GPUs.** Instead of cutting the weights across the eight GPUs, every GPU gets a full copy of the model, which is small, and the enormous attention calculation is what gets split up. The book's name for this is context parallelism.
 
 The book compares video models today to language models two years earlier: slow, limited to short outputs, and using every bit of the best hardware available. That comparison is a good reason to be patient with them.
 

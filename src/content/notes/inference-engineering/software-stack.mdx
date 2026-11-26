@@ -4,12 +4,12 @@ short: The software stack
 description: A file of weights cannot run itself. Between it and the chip sits a stack of software, and the same model on the same GPU can be several times faster depending on which layer of that stack you use.
 date: 2026-11-26
 series: inference-engineering
-chapter: 6
+chapter: 7
 book:
   - where: Section 4.1, CUDA (pp. 96–101)
-    what: Kernels, the libraries they come from, choosing between them, and kernel fusion.
+    what: Kernels, the libraries they come from, choosing between them, and kernel fusion with a worked example.
   - where: Section 4.2, Deep Learning Frameworks and Libraries (pp. 101–105)
-    what: PyTorch and compilation, safetensors and ONNX, ONNX Runtime and TensorRT, Transformers and Diffusers.
+    what: PyTorch and compilation, safetensors and ONNX, ONNX Runtime and TensorRT side by side, Transformers and Diffusers.
   - where: Sections 4.3 and 4.4 (pp. 105–112)
     what: vLLM, SGLang and TensorRT-LLM compared, and NVIDIA Dynamo on top of them.
   - where: Section 4.5.3, Profiling Performance (pp. 114–115)
@@ -84,13 +84,15 @@ A kernel does one job. Multiply these two matrices. Apply this function to every
 
 **CUDA** is the system NVIDIA provides for writing kernels and running them. It is not a programming language. Kernels are usually written in C++. But it is the foundation that everything else stands on, and it is a large part of why NVIDIA is so hard to compete with. A rival chip needs its own version of all of this.
 
-Almost nobody writes kernels from scratch. They come in libraries. The most heavily used one in inference is the kernel for general matrix multiplication, because that is what every linear layer in a model boils down to.
+Almost nobody writes kernels from scratch. They come in libraries. The most heavily used one in inference is the kernel for general matrix multiplication, because that is what every linear layer in a model boils down to. You will see it shortened to GEMM, and NVIDIA's standard collection of such kernels is called cuBLAS.
 
 What surprised me is how tied a kernel is to one specific chip. A good one is written around the exact amount of fast memory and the exact layout of a particular GPU. The book notes that FlashAttention for an H100 is different code from FlashAttention for a B200. This is why a brand new GPU does not reach its full speed on day one. The kernels have to catch up.
 
+So part of the job is choosing kernels, and mostly the software does it for you. Frameworks and engines arrive with a kernel already picked for each operation on each kind of GPU. Now and then it pays to overrule one by hand. The book's example: when the DeepSeek lab released one of its models, it also released its own matrix-multiplication kernels for 8-bit numbers on one generation of GPU, quicker than the standard ones for that case. You can plug a kernel like that in for a single step of a model. The price is that whether it still works on the next GPU is now your problem.
+
 ## Same maths, different speed
 
-How can two pieces of code that compute the same thing differ so much in speed? [Chapter 4](/inference-engineering/prefill-and-decode) already gave the answer: fetching data from memory is the slow part.
+How can two pieces of code that compute the same thing differ so much in speed? [Chapter 5](/inference-engineering/prefill-and-decode) already gave the answer: fetching data from memory is the slow part.
 
 Suppose you need to do three things to a big array of numbers: multiply by something, add something, then replace the negatives with zero. That happens to be what a layer of a neural network does.
 
@@ -128,7 +130,9 @@ Two smaller things at this layer are worth knowing.
 
 **Model files.** Weights are usually shipped as *safetensors* files. The name is literal. Older formats could run arbitrary code when you opened them, and this one holds nothing but numbers. Another format, ONNX, stores the weights together with a description of the model's structure, which makes a file more portable between tools.
 
-**Reference code.** The `transformers` library from Hugging Face is what the sample code on a model's page uses. The book is clear about what it is for: a correct, readable implementation to learn from and adapt. It was never meant for serving at scale.
+**Runtimes.** A file like that can be handed to a program built only for running models. ONNX Runtime is the open one and works on many kinds of hardware. TensorRT is NVIDIA's, and it compiles the model into something tuned for one particular NVIDIA GPU. For language models this middle step is going out of fashion, and people go straight from PyTorch to an engine. The book says TensorRT is still widely used for image and video models.
+
+**Reference code.** The `transformers` library from Hugging Face is what the sample code on a model's page uses, and `diffusers` is its twin for image models. The book is clear about what they are for: a correct, readable implementation to learn from and adapt. It was never meant for serving at scale.
 
 That, by the way, is what I used for every measurement in this series. So my numbers are the slow version on purpose.
 
@@ -157,26 +161,21 @@ More than four fifths of the time is matrix multiplication. That is the whole re
 
 And the second row is waste. The reference code works out a score for every token in the vocabulary at every position of the prompt. Only the scores at the last position are needed to pick the next token. A real engine skips the rest. I would not have guessed that a quarter of the time was going there, and that is the point of profiling. You find the thing you did not think to look for.
 
+The book lists three profilers. One is built into PyTorch, and it is the one I used. The other two come from NVIDIA and look at the GPU itself: one across a whole system, one inside a single kernel. It also says most inference engineers will rarely open any of them. If you run a ready-made engine, your work is a loop of changing settings and benchmarking. Profiling is for people who write their own serving code, or who work on the engines.
+
 ## Engines: where most of the work happens now
 
 An **inference engine** is a complete server for a model. You give it weights and a configuration. It gives you an API, and inside it are the techniques from this series, already written and tested: batching, the KV cache, quantized weights, speculation, splitting across GPUs.
 
 This is the layer most inference engineers work at. The job becomes choosing an engine and tuning its settings, not writing kernels.
 
-The book compares three.
+The book compares three, and the comparison comes down to one trade. Two of them are easy to pick up and will run almost any model. The third takes real effort, supports fewer models, only works on NVIDIA GPUs, and is usually the fastest.
 
-| | vLLM | SGLang | TensorRT-LLM |
-| --- | --- | --- | --- |
-| Speed | Good | Good | Best |
-| Ease | Easy | Easy | Hard |
-| Models supported | Most | Most | Some |
-| Hardware | Many vendors | NVIDIA, AMD | NVIDIA only |
+**vLLM** is the most widely used. It supports the most models and the most kinds of hardware, including chips that are not NVIDIA's, and a new open model usually works in it on the day of release. It is the one to reach for when you want something running quickly.
 
-**vLLM** is the most widely used. It supports the most models and the most kinds of hardware, and a new open model usually works in it on the day of release. It is the one to reach for when you want something running quickly.
+**SGLang** is the other community-built engine, for NVIDIA and AMD GPUs. It has put a lot of work into very large Mixture of Experts models spread over many machines, and it is built so that you can swap out individual parts.
 
-**SGLang** is the other community-built engine. It has put a lot of work into very large Mixture of Experts models spread over many machines, and it is built so that you can swap out individual parts.
-
-**TensorRT-LLM** is NVIDIA's. It is usually the fastest, partly because it has access to kernels written by NVIDIA's own engineers, and it takes the most effort to set up. The book's author says his team uses all three, and this one most.
+**TensorRT-LLM** is NVIDIA's. It is usually the fastest, partly because it has access to kernels written by NVIDIA's own engineers, and it takes the most effort to set up. One trap in the name: it began as an add-on to the TensorRT runtime from the section above, and since its version 1 it no longer uses TensorRT at all. The book's author says his team uses all three engines, and this one most.
 
 There is a principle running through that comparison which the book states outright and which I keep noticing everywhere in this subject. The more you constrain a system, the faster it can go. The engine that supports everything is rarely the fastest at any one thing.
 

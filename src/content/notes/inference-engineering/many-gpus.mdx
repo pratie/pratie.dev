@@ -4,7 +4,7 @@ short: More than one GPU
 description: Big models do not fit on a single GPU. Splitting one across several is easy to draw and hard to do well, because GPUs talk to each other far more slowly than they think.
 date: 2026-11-26
 series: inference-engineering
-chapter: 10
+chapter: 11
 book:
   - where: Section 5.4, Model Parallelism (pp. 142–144)
     what: Estimating how many GPUs a model needs, and the three ways of splitting it.
@@ -18,7 +18,7 @@ import CalcFig from '../../../components/figures/CalcFig.astro';
 import Pipeline from '../../../components/figures/Pipeline.astro';
 import { GPUS } from '../../../lib/calcs';
 
-In [the calculator from chapter 5](/inference-engineering/gpus), a 70-billion-parameter model at full precision barely squeezed onto the biggest GPU. The largest open models have ten times as many parameters. They do not fit on anything.
+In [the calculator from chapter 6](/inference-engineering/gpus), a 70-billion-parameter model at full precision barely squeezed onto the biggest GPU. The largest open models have ten times as many parameters. They do not fit on anything.
 
 So the model has to be spread over several GPUs. The obvious way is to put the first half of the layers on one GPU and the second half on another.
 
@@ -51,11 +51,11 @@ First, the count. The memory has to hold the weights and leave room for [the KV 
 
 </CalcFig>
 
-A handy number falls out of this: at 8 bits, a billion parameters is about a gigabyte. The book's example is DeepSeek, at 671 billion. Four of the largest GPUs could just about hold those weights and would have nothing left to work with. In practice it takes a full node of eight.
+A handy number falls out of this: at 8 bits, a billion parameters is about a gigabyte. The book's example is DeepSeek, at 671 billion. Four of the largest GPUs could just about hold those weights and would have nothing left to work with. In practice it takes a full node of eight. The book adds that taking more than the minimum is common even for mid-sized models, because the extra memory buys a bigger cache and a faster answer for each user.
 
 ## The catch: talking is slow
 
-Remember the bars from chapter 5. Inside one GPU, data moves at thousands of gigabytes a second. Between two GPUs in the same node, about a quarter of that. Between two nodes, a small fraction again.
+Remember the bars from chapter 6. Inside one GPU, data moves at thousands of gigabytes a second. Between two GPUs in the same node, about a quarter of that. Between two nodes, a small fraction again.
 
 So the moment a model is spread across GPUs, a new kind of waiting appears. Every time one GPU needs something that another one has, the whole computation slows to the speed of the wire between them.
 
@@ -71,7 +71,7 @@ It is a relay race. Only one runner is moving at a time, and the other stands wa
 
 This is where the speed comes from. Writing is limited by how fast weights can be fetched, and now every GPU fetches only its own slice, all at once. The price is that after each layer the GPUs have to combine their partial results before the next layer can start. That is a lot of talking, so it only works where the wires are fast: inside one node. This is called **tensor parallelism**, and the book says to treat it as the default.
 
-**By expert.** This one only applies to Mixture of Experts models, from [chapter 4](/inference-engineering/prefill-and-decode), where a layer is split into many small experts and each token uses only a few. Put whole experts on each GPU. A token gets sent to whichever GPUs hold the experts it needs.
+**By expert.** This one only applies to Mixture of Experts models, from [chapter 5](/inference-engineering/prefill-and-decode), where a layer is split into many small experts and each token uses only a few. Put whole experts on each GPU. A token gets sent to whichever GPUs hold the experts it needs.
 
 The GPUs talk much less here, because nothing has to be combined after every layer. Each token does not get any faster. But many tokens can be in flight at once, on different GPUs, so the system as a whole gets through more. This is **expert parallelism**.
 
@@ -95,7 +95,7 @@ The book adds a warning I thought was sensible. Unless the model truly cannot fi
 
 ## Splitting the work instead of the model
 
-There is another kind of split, and it follows from everything since chapter 4.
+There is another kind of split, and it follows from everything since chapter 5.
 
 Reading a prompt is limited by calculating. Writing an answer is limited by fetching. On a quiet server the two coexist nicely, because they lean on different parts of the chip. On a busy one they get in each other's way. Someone pastes in a huge document, the GPU throws all its compute at reading it, and everyone else's stream of tokens stutters.
 
@@ -118,6 +118,8 @@ Now each side can be set up for its own bottleneck, and each can be scaled by it
 Look at the middle box, though. [The KV cache is big](/inference-engineering/kv-cache), and it now has to travel between machines on every request. That transfer is the new cost. It is one reason fast wiring matters, and one more reason to shrink the cache with quantization.
 
 There is also a sensible shortcut. If a prompt is short, or its beginning is already cached, the decode worker simply reads it itself and skips the hand-off.
+
+In a real system the number of each kind of worker is not fixed either. [NVIDIA's Dynamo](/inference-engineering/software-stack#above-the-engine) can change the mix while the service is running, as traffic shifts between long prompts and long answers. It keeps a queue of prompts waiting to be read, and that queue is the thing to watch. When it grows, the reading side needs more machines. The other thing that runs short is cache space on the writing side.
 
 ### When is it worth it?
 

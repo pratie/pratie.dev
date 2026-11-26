@@ -4,7 +4,7 @@ short: Quantization
 description: A model's weights are stored with far more precision than it needs. Rounding them makes the model smaller and faster, until quite suddenly it stops being the same model.
 date: 2026-11-26
 series: inference-engineering
-chapter: 7
+chapter: 8
 related:
   - gpt-from-scratch
 book:
@@ -128,7 +128,9 @@ My experiment was deliberately crude, and it used a tiny model. Three things are
 
 **Floating-point formats instead of whole numbers.** My grid was evenly spaced, so a single large value stretched it for everyone. A floating-point format spends some of its bits on an exponent, which puts many grid points close to zero and still lets a few reach far out. The book's term for how far a format can stretch is **dynamic range**, and it is the reason production systems prefer 8-bit floats over 8-bit integers.
 
-**Finer granularity, built into the chip.** The newest GPUs support formats that keep one scale for every block of 32 values, or even 16. That is "one scale per four" from the figure, done in hardware.
+You will meet these formats by their short names, which are a type and a number of bits. FP16 is a 16-bit float, and the usual starting point for inference. FP8 is the 8-bit float. INT8 and INT4 are whole-number formats. FP4 is a 4-bit float, with variants called MXFP4 and NVFP4. An FP8 number spends one bit on the sign, four on the exponent and three on the digits.
+
+**Finer granularity, built into the chip.** The levels have names. One scale for a whole matrix is the tensor level. One per column is the channel level, which is what my second run did. Finer still is the block level, and the newest GPUs support formats that keep one scale for every block of 32 values, or even 16. That is "one scale per four" from the figure, done in hardware.
 
 **Not quantizing everything.** Parts of a model differ in how much rounding they tolerate. The book ranks them from safest to riskiest:
 
@@ -139,9 +141,13 @@ My experiment was deliberately crude, and it used a tiny model. Three things are
 
 Attention is the riskiest because its errors compound. What a token computes is reused by every token after it, so a small error early on is carried through thousands of steps. Almost everyone leaves that arithmetic at full precision.
 
+Even within the safest group there are exceptions. The very first and very last layers of a network are often left as they were, because they are touchier than the ones in the middle.
+
 Bigger models also forgive more. With hundreds of billions of weights, each one matters less. GPT-2 is small enough that I was probably looking at something close to the worst case.
 
-One last distinction. A lab can train a model to live at low precision from the start, which is called quantization-aware training. If you are working with weights someone else released, you can only round them afterwards. That is post-training quantization, and it is what I did here, minus the careful calibration a real tool would add.
+One last distinction. A lab can train a model to live at low precision from the start, which is called quantization-aware training. If you are working with weights someone else released, you can only round them afterwards. That is post-training quantization, and it is what I did here, minus the careful calibration a real tool would add. The book names NVIDIA's ModelOpt as a leading tool for doing it properly.
+
+One more thing you will run into if you download models to run at home. Files in a format called GGUF often advertise odd figures like 1.58 bits. Those are averages. Some parts of the model are kept at full precision and others are squeezed into whole numbers of a bit or two. It is impressive work, and it is what lets a huge model fit on a laptop. The book's advice for a production service is different: stay with 8-bit floats, because whole-number formats cannot stretch far enough to be safe when quality matters.
 
 ## Where this leaves us
 

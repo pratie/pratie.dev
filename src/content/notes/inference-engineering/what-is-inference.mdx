@@ -61,7 +61,7 @@ Now forty people ask at the same moment.
 
 Taken one at a time, the fortieth person waits four minutes. Nobody waits four minutes for a chatbot.
 
-You can do much better by running several requests through the model together, which is called batching. I get to why that works in [chapter 4](/inference-engineering/prefill-and-decode). For now, look at what it costs. Each individual answer gets slower, and the crowd as a whole is served far sooner. That is a trade: speed for one person against speed for everyone. Which side you favour depends on what you are building.
+You can do much better by running several requests through the model together, which is called batching. I get to why that works in [chapter 5](/inference-engineering/prefill-and-decode). For now, look at what it costs. Each individual answer gets slower, and the crowd as a whole is served far sooner. That is a trade: speed for one person against speed for everyone. Which side you favour depends on what you are building.
 
 And we have not even asked the next question. What if four hundred people turn up? No batch size saves a single GPU then. You need more GPUs, something to decide which request goes to which one, and something to start machines when traffic rises and stop them when it falls, because a GPU costs dollars an hour whether it is busy or idle.
 
@@ -81,12 +81,12 @@ The book sorts all of this into three layers, and it is a useful way to hold the
     {
       name: 'Infrastructure',
       note: 'Many machines acting as one service: adding and removing replicas, routing requests, surviving failures, finding enough GPUs.',
-      eg: 'chapters 12 and 13',
+      eg: 'chapters 13 and 14',
     },
     {
       name: 'Runtime',
       note: 'One model on one machine, made as fast and efficient as it can be.',
-      eg: 'chapters 4 to 11',
+      eg: 'chapters 4 to 12',
     },
   ]}
   bottom="the GPUs"
@@ -121,6 +121,6 @@ I think that argument is mostly right, with a caveat. The author works at Basete
 
 ## How these notes are laid out
 
-Chapters 2 and 3 are about knowing what you want before you optimise anything. Chapters 4 to 6 open up what is happening inside: the model, the hardware, and the software in between. Chapters 7 to 10 are the techniques from the toolbox. Chapter 11 looks at models that are not text. Chapters 12 and 13 are about running the whole thing for real.
+Chapters 2 and 3 are about knowing what you want before you optimise anything. Chapters 4 to 7 open up what is happening inside: the request, the model, the hardware, and the software in between. Chapters 8 to 11 are the techniques from the toolbox. Chapter 12 looks at models that are not text. Chapters 13 and 14 are about running the whole thing for real. The last two are for looking things up: [every term in one place](/inference-engineering/glossary), and [where to read next](/inference-engineering/further-reading).
 
 One note on the numbers. Wherever I could, I measured things on my own laptop instead of quoting someone else. It is a 2017 MacBook Pro with two CPU cores and no GPU worth mentioning, and it runs GPT-2 at about 25 tokens a second. A datacenter GPU is hundreds of times faster, so ignore my absolute numbers. The shapes carry over, and the shapes are what I am after.

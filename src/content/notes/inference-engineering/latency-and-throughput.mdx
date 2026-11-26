@@ -125,7 +125,7 @@ The last distinction is where the timing starts and stops.
 
 In my experiment the typical request needed {span(middle(load.compute_ms) / 1000)} of actual computing, and {span(load.p50 / 1000)} from start to finish. The rest was standing in line.
 
-The book puts it in a way I found useful. Inference time tells you whether your work on the model is paying off. End-to-end time tells you what users feel. When the first is good and the second is bad, stop tuning the model. The problem is in the infrastructure, which is [chapter 12](/inference-engineering/autoscaling).
+The book puts it in a way I found useful. Inference time tells you whether your work on the model is paying off. End-to-end time tells you what users feel. When the first is good and the second is bad, stop tuning the model. The problem is in the infrastructure, which is [chapter 13](/inference-engineering/autoscaling).
 
 ## Measuring honestly
 
@@ -138,7 +138,11 @@ Every technique in this series ends with "then measure whether it helped". A mea
 
 The best test of all is to copy real traffic onto the system you are testing, which is called shadowing. Users are unaffected and the test is as realistic as a test can be.
 
-And the old rule for experiments applies. Change one thing, measure, then change the next.
+When you cannot do that, there are ready-made tools for sending pretend traffic. The book names three: genai-bench from the SGLang team, GenAI-Perf from NVIDIA, and Locust, a general load tester that was not built for AI. It also suggests borrowing the questions from a public eval set, which gives you varied and realistic prompts for nothing.
+
+A test has to be repeatable too. Send enough requests that one unlucky outlier cannot move the result, and run it more than once.
+
+And the old rules for experiments apply. Take a baseline before you touch anything. Then change one thing, measure, and change the next.
 
 ## Where this leaves us
 

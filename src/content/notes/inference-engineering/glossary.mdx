@@ -1,0 +1,216 @@
+---
+title: The words, in one place
+short: Glossary
+description: Every term these notes lean on, in a sentence or two each, grouped by the chapter that explains it.
+date: 2026-11-26
+series: inference-engineering
+chapter: 15
+book:
+  - where: Appendix A, Inference Glossary (pp. 209–230)
+    what: About two hundred terms in alphabetical order, including many product and tool names that are not on this page.
+---
+
+These notes introduce a lot of words, and they are spread over fourteen chapters. Here they are in one place, each in a sentence or two, in the order the chapters meet them.
+
+If a line here is too short to make sense, go to the chapter. That is where the example is.
+
+The words for what is inside a model, such as token, embedding and attention, are in [the basics note](/notes/how-llms-work#the-words-in-one-place).
+
+## The basics
+
+From [chapter 1](/inference-engineering/what-is-inference) and [chapter 2](/inference-engineering/know-your-workload).
+
+- **Training.** The phase in which a model's weights get their values. It happens once per model.
+- **Inference.** Using the finished weights to answer a request. It happens every time someone asks.
+- **Runtime, infrastructure, tooling.** The book's three layers: one model on one machine, many machines acting as one service, and how much of all that an engineer has to see.
+- **Latency.** How long one person waits.
+- **Throughput.** How much work the whole system gets through per second. It decides what each answer costs.
+- **Shared inference.** Calling a public endpoint and paying for each token.
+- **Dedicated deployment.** Renting GPUs by the hour and running the model yourself.
+- **Online and offline.** Online work has a person waiting on every request. Offline work has nobody waiting, so it can be tuned for throughput alone.
+- **Evals.** A set of examples from your own product, with a way to score a model's answers to them.
+- **Fine-tuning.** Training an existing model further on examples of one task.
+- **Distillation.** Training a small model to imitate a large one.
+
+## Measuring
+
+From [chapter 3](/inference-engineering/latency-and-throughput).
+
+- **Time to first token (TTFT).** The wait between sending a request and seeing the first piece of the answer.
+- **Tokens per second (TPS).** The pace of the answer. For one user it is a latency number. Added up over everyone it is a throughput number.
+- **Inter-token latency (ITL).** The gap between two tokens. A gap of 10 milliseconds is 100 tokens a second.
+- **Percentiles (P50, P90, P99).** Sort every request from fastest to slowest. P99 is the time that 99% of them beat.
+- **Inference time.** Measured on the server, from when the model starts on a request to when it finishes.
+- **End-to-end time.** Measured from the user's side, including the network and any queue.
+- **Benchmark.** A test that says how fast a system is.
+- **Profiler.** A tool that says where the time inside it went.
+- **Shadowing.** Copying real traffic onto a system under test, without the users noticing.
+- **ISL and OSL.** Input and output sequence length: how many tokens go in and how many come out.
+
+## One request
+
+From [chapter 4](/inference-engineering/one-request).
+
+- **Chat template.** The recipe that flattens a list of messages into the single string a model reads, with markers for who said what.
+- **Base and instruct.** A base model continues any text. An instruct or chat version has been trained further on conversations in one format.
+- **Vocabulary.** The table of every token a model knows.
+- **Input, reasoning and output sequence.** What came in, what the model wrote while thinking, and the answer.
+- **Context window.** The most tokens a model can handle in one request, with all three sequences counted together.
+- **Logits.** The raw scores a pass ends in, one for each entry in the vocabulary.
+- **Temperature, top-k, top-p.** Settings that make the pick of the next token more or less predictable.
+- **Structured output.** Making the answer follow a format such as JSON, by ruling out tokens that would break it.
+- **Stop token.** The token that means the model is done.
+- **Streaming.** Sending each piece of the answer as soon as it is made.
+- **Linear layer.** A vector multiplied by a grid of weights. Most of a model is this.
+- **Activation function.** A small bend applied to each number between linear layers. Without it, a stack of layers would collapse into one.
+- **Hidden state.** The vectors that pass from one layer to the next.
+- **Encoder and decoder.** A network that reads an input into an internal form, and one that writes an output.
+- **Architecture.** The shape of a model: which layers it has and how big they are. It is what inference software supports.
+- **LoRA.** A common way to fine-tune, by adding a small set of extra weights beside the original ones.
+
+## Inside a pass
+
+From [chapter 5](/inference-engineering/prefill-and-decode).
+
+- **Pass.** One trip through the whole model. Also called a forward pass.
+- **Prefill.** The model reading the prompt: every input token, in a single pass.
+- **Decode.** The model writing: one pass for each new token.
+- **Compute.** How much arithmetic a chip can do per second.
+- **Memory bandwidth.** How many bytes a chip can fetch from its memory per second.
+- **Compute bound and memory bound.** Limited by the arithmetic, or limited by the fetching. Prefill is the first. Decode is the second.
+- **Arithmetic intensity.** How many operations a job does for each byte it fetches.
+- **Ops-to-byte ratio.** How many operations a chip can do in the time it takes to fetch one byte. Compare it with the line above to see which limit a job will hit.
+- **Roofline.** The chart of those two limits meeting.
+- **Batching.** Running several requests through the model in the same pass.
+- **FlashAttention.** Attention worked out in an order that keeps the intermediate results on the chip. Same answer, fewer trips to memory.
+- **Mixture of Experts (MoE).** A model whose big layers are split into many small experts, with each token sent through only a few of them.
+
+## Hardware
+
+From [chapter 6](/inference-engineering/gpus).
+
+- **FLOPS.** Floating-point operations per second. A teraFLOPS is a trillion of them.
+- **VRAM.** A GPU's main memory, where the weights have to fit.
+- **Streaming multiprocessor.** One of the groups a GPU's workers are organised into.
+- **Tensor Core.** The part of a GPU built to multiply grids of numbers.
+- **Hopper, Lovelace, Blackwell, Rubin.** Generations of NVIDIA GPU. The first letter of a GPU's name says which one it belongs to.
+- **Instance.** What you rent in a cloud: one or more GPUs, with CPUs, RAM, disk and networking around them.
+- **Node.** A box of GPUs wired together, usually eight.
+- **NVLink.** The fast wiring between the GPUs inside a node.
+- **InfiniBand.** Fast networking between nodes. Much slower than NVLink.
+- **Multi-instance GPU (MIG).** One large GPU cut into as many as seven independent pieces.
+- **Grace and Vera.** NVIDIA's own CPUs, sold joined to its GPUs with a fast link between the two.
+- **Local inference.** Running the model on the user's own device.
+
+## Software
+
+From [chapter 7](/inference-engineering/software-stack).
+
+- **CUDA.** NVIDIA's system for writing and running code on its GPUs.
+- **Kernel.** A piece of code that does one operation on a GPU as fast as that chip allows.
+- **GEMM.** General matrix multiplication, the most used kernel in inference.
+- **Kernel fusion.** Combining several operations into one kernel, so the data crosses memory once.
+- **PyTorch.** The framework nearly all models are written in.
+- **Compilation.** Letting a framework pick and fuse kernels for one specific GPU before serving.
+- **safetensors.** The usual file format for weights. It holds numbers and nothing that can run.
+- **ONNX.** A file format that stores the weights together with the model's structure.
+- **ONNX Runtime and TensorRT.** Programs that run a model from such a file. The first is open and broad. The second is NVIDIA's.
+- **Inference engine.** A complete server for a model, with batching, caching and the other techniques built in.
+- **vLLM, SGLang, TensorRT-LLM.** The three engines the book compares.
+- **Dynamo.** NVIDIA's layer above the engines, for coordinating many of them across machines.
+
+## Quantization
+
+From [chapter 8](/inference-engineering/quantization).
+
+- **Quantization.** Storing a model's numbers with fewer bits each.
+- **Scale.** The number that says how far apart the points of the coarse grid are.
+- **Granularity.** How many numbers share one scale. The fewer, the more accurate.
+- **Dynamic range.** The distance between the smallest and the largest value a format can hold.
+- **FP16, FP8, FP4.** Floating-point formats of 16, 8 and 4 bits.
+- **INT8, INT4.** Whole-number formats of 8 and 4 bits.
+- **Microscaling formats.** Formats that keep a separate scale for every small block of values. MXFP8, MXFP4 and NVFP4 are the ones named in the book.
+- **Post-training quantization.** Rounding the weights of a model that has already been trained.
+- **Quantization-aware training.** Training a model to live at low precision from the start.
+- **Perplexity.** A measure of how surprised a model is by real text. Lower is better.
+
+## Speculation
+
+From [chapter 9](/inference-engineering/speculative-decoding).
+
+- **Speculative decoding.** Letting something cheap guess the next few tokens, and having the big model check all of them in one pass.
+- **Draft.** The guessed tokens.
+- **Acceptance rate.** The share of drafted tokens that turn out to be right.
+- **Draft model.** A smaller model used as the guesser.
+- **Medusa.** Extra output layers on the big model that guess further ahead.
+- **EAGLE.** A small guesser trained for one particular big model, which reads that model's hidden states.
+- **N-gram speculation.** Guessing from sequences already seen in the prompt. No model is needed.
+- **Lookahead decoding.** The same idea, with the table filled from what the model writes as it goes.
+
+## Caching
+
+From [chapter 10](/inference-engineering/kv-cache).
+
+- **Query, key, value.** In attention: the reading token's question, what each earlier token can be found by, and what it hands over.
+- **KV cache.** The stored keys and values of every token read so far, kept so they are never worked out twice.
+- **Prefix caching.** Reusing the KV cache of a shared beginning from one request to the next.
+- **Cache-aware routing.** Sending a request to the server that already holds its cache.
+- **Long context.** A text long enough that its cache starts to cause trouble.
+- **PagedAttention.** Storing the cache in small fixed-size pages, so memory is not lost to gaps.
+- **Chunked prefill.** Reading a very long prompt in pieces, so other users' tokens can get through in between.
+
+## Many GPUs
+
+From [chapter 11](/inference-engineering/many-gpus).
+
+- **Pipeline parallelism.** Splitting a model by layer: early layers on one GPU, late layers on another.
+- **Tensor parallelism.** Splitting every layer across the GPUs, so all of them work on each token.
+- **Expert parallelism.** Putting whole experts of a Mixture of Experts model on each GPU.
+- **Multi-node inference.** One model spread over more than one box of GPUs.
+- **Disaggregation.** Running prefill and decode on separate machines.
+- **xPyD.** Shorthand for a disaggregated setup. 5P3D is five prefill workers and three decode workers.
+
+## Other models
+
+From [chapter 12](/inference-engineering/other-modalities).
+
+- **Vision language model (VLM).** A language model with a small encoder in front that turns pictures into tokens.
+- **Omni model.** A model that takes several kinds of input and produces several kinds of output.
+- **Embedding model.** A model that turns a piece of text into one vector that captures its meaning.
+- **ASR.** Automatic speech recognition: audio in, text out.
+- **Diarization.** Working out who is speaking when.
+- **Real-time factor.** How many times faster than real time a recording is transcribed.
+- **TTS.** Text to speech.
+- **Denoiser.** A model that starts from random noise and cleans it up over a fixed number of steps. Image and video generators work this way.
+- **Latent space.** The much smaller grid an image model works on, before a final step turns it into pixels.
+- **Guidance.** How strongly an image follows its prompt. It is the reason every step runs the model twice.
+- **VAE.** The part of an image pipeline that turns the latent grid into pixels.
+- **Few-step model.** An image model trained to finish in eight steps or fewer.
+- **Cross-attention.** Attention in which one thing reads another, such as a picture reading its prompt.
+- **Context parallelism.** Giving every GPU a full copy of a video model and splitting the attention calculation between them.
+
+## Scaling
+
+From [chapter 13](/inference-engineering/autoscaling).
+
+- **Container.** A server and everything it depends on, frozen so that it runs the same way anywhere.
+- **Image.** The file a container is started from.
+- **NIM.** A ready-made container from NVIDIA for a popular model.
+- **Replica.** One running copy of the server.
+- **Autoscaling.** Changing the number of replicas as traffic rises and falls.
+- **Static, dynamic and continuous batching.** Waiting for a full batch, waiting up to a time limit, or letting requests join and leave between tokens. Modern engines do the third.
+- **Cold start.** The delay before a new replica can serve its first request.
+- **Queue.** Where requests wait when nothing is free to serve them.
+- **Scale to zero.** Running no replicas at all when there is no traffic.
+
+## Operations
+
+From [chapter 14](/inference-engineering/operations).
+
+- **Reserved, on-demand, spot.** Three ways to rent a GPU: committed for months, taken when needed, or leftover capacity that can be taken back.
+- **Active-active.** Several regions serving traffic all the time, so that one can fail and the others absorb its share.
+- **Active-passive.** A spare region kept ready and idle, and switched to when needed.
+- **Blue-green release.** Building a complete second copy with the change in it and switching all traffic at once.
+- **Canary release.** Sending the new version a little traffic first, and more as it proves itself.
+- **Asynchronous request.** Handing over a job and being called back when it is done.
+- **WebSocket and gRPC.** Two ways to keep a connection open in both directions, for live audio and video.

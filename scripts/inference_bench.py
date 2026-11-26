@@ -12,6 +12,9 @@ Run everything, or name the parts you want:
     python scripts/inference_bench.py
     python scripts/inference_bench.py kvcache quant
 Writes src/data/bench/<part>.json. Close other programs first; timings are noisy.
+
+Two parts do not need GPT-2 and skip loading it when run by themselves:
+    python scripts/inference_bench.py compute templates
 """
 import json
 import pathlib
@@ -31,9 +34,13 @@ OUT = ROOT / "src" / "data" / "bench"
 OUT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / "scripts"))
 
-tok = GPT2TokenizerFast.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2").eval()
-BOS = tok.bos_token_id
+# Parts that never touch GPT-2. Asking only for these skips loading the model.
+LIGHT = {"compute", "templates"}
+NEEDS_GPT2 = not sys.argv[1:] or not set(sys.argv[1:]) <= LIGHT
+
+tok = GPT2TokenizerFast.from_pretrained("gpt2") if NEEDS_GPT2 else None
+model = GPT2LMHeadModel.from_pretrained("gpt2").eval() if NEEDS_GPT2 else None
+BOS = tok.bos_token_id if tok else None
 
 # Filler text to cut prompts of any length from. Its meaning does not matter for timing.
 FILLER = (
@@ -42,7 +49,7 @@ FILLER = (
     "because every person is waiting, every answer has a different length, and the "
     "hardware that does the work is expensive and never quite the right size. "
 ) * 40
-FILLER_IDS = tok.encode(FILLER)
+FILLER_IDS = tok.encode(FILLER) if tok else []
 
 
 def save(name, obj):
@@ -240,6 +247,59 @@ def membw():
     })
 
 
+# --- compute: how much arithmetic this machine can do when memory is not in the way
+def compute():
+    n = 1536
+    a, b = torch.rand(n, n), torch.rand(n, n)
+    a @ b
+    # The machine is rarely idle, so keep the fastest try: that is what it is capable of.
+    seconds = min(timed(lambda: a @ b, repeats=1)[0] for _ in range(25))
+    # An n-by-n product is n*n*n multiplications and about as many additions.
+    save("compute", {"size": n, "tries": 25, "matmul_gflops": r(2 * n**3 / seconds / 1e9, 1)})
+
+
+# --- templates: one conversation, flattened into a single string by real chat templates
+def templates():
+    from transformers import AutoTokenizer
+
+    messages = [
+        {"role": "system", "content": "Answer in one short sentence."},
+        {"role": "user", "content": "Why is the sky blue?"},
+    ]
+    models = []
+    for name, repo in (("Qwen 2.5", "Qwen/Qwen2.5-0.5B-Instruct"), ("Phi-3", "microsoft/Phi-3-mini-4k-instruct")):
+        t = AutoTokenizer.from_pretrained(repo)
+        text = t.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        ids = t.apply_chat_template(messages, tokenize=True, add_generation_prompt=True)
+        # Split the string into what I wrote and what the template added around it.
+        parts, spans, at = [], [], 0
+        for message in messages:
+            start = text.index(message["content"], at)
+            if start > at:
+                parts.append({"kind": "template", "text": text[at:start]})
+            parts.append({"kind": "content", "text": message["content"]})
+            at = start + len(message["content"])
+            spans.append((start, at))
+        if at < len(text):
+            parts.append({"kind": "template", "text": text[at:]})
+        # A token counts as mine only if it lies wholly inside one of my messages.
+        enc = t(text, add_special_tokens=False, return_offsets_mapping=True)
+        assert enc["input_ids"] == list(ids), f"{repo}: the two ways of tokenizing disagree"
+        mine = sum(any(a >= s and b <= e for s, e in spans) for a, b in enc["offset_mapping"] if b > a)
+        models.append({
+            "name": name, "repo": repo, "parts": parts,
+            "tokens": len(ids), "content_tokens": mine, "vocab": len(t),
+        })
+        print(name, len(ids), "tokens,", mine, "from the messages", flush=True)
+        print(text, flush=True)
+    base = AutoTokenizer.from_pretrained("gpt2")
+    save("templates", {
+        "messages": messages,
+        "models": models,
+        "gpt2": {"has_template": base.chat_template is not None, "vocab": len(base)},
+    })
+
+
 # --- fusion: the same three operations with many trips to memory, or few
 def fusion():
     n = 32 * 1024 * 1024
@@ -433,6 +493,7 @@ def spec():
 PARTS = {
     "phases": phases, "ttft": ttft, "kvcache": kvcache, "batching": batching, "membw": membw,
     "fusion": fusion, "profile": profile, "quant": quant, "spec": spec, "percentiles": percentiles,
+    "compute": compute, "templates": templates,
 }
 
 if __name__ == "__main__":

@@ -1,0 +1,76 @@
+---
+title: Where to read next
+short: Further reading
+description: The papers and manuals behind each chapter. A short list, with a line on what each one adds.
+date: 2026-11-26
+series: inference-engineering
+chapter: 16
+book:
+  - where: Appendix B, Recommended Reading (pp. 231–256)
+    what: A much longer list in six groups, covering architecture, developer tools, open models, GPU infrastructure, optimisation research and evaluation.
+---
+
+Every chapter ends by pointing at pages of the book. This page points one step further out, at the papers and manuals the ideas come from.
+
+It is short on purpose: one or two sources for each chapter, the ones worth opening first, with a line on what each adds. The book's own list is several times longer and is arranged by subject. Most of what is here is on it. A few are my own additions, and I have marked those.
+
+## Three books
+
+The book itself recommends three others, for three different directions.
+
+- [*Build a Large Language Model (From Scratch)*](https://www.manning.com/books/build-a-large-language-model-from-scratch), Sebastian Raschka, 2024. For going further into what is inside a model than [the from-scratch note](/notes/gpt-from-scratch) does.
+- [*AI Engineering*](https://huyenchip.com/books/), Chip Huyen, 2025. The wide view of building products on models: evals, choosing a model, fine-tuning. It is [chapter 2](/inference-engineering/know-your-workload) at the length of a book.
+- *AI Systems Performance Engineering*, Chris Fregly, 2025. The performance side, closer to the hardware.
+
+## The model
+
+For [chapter 4](/inference-engineering/one-request) and [chapter 5](/inference-engineering/prefill-and-decode).
+
+- ["Attention Is All You Need"](https://arxiv.org/abs/1706.03762), Vaswani and others, 2017. The paper that introduced the transformer, the design every model in this series is built on.
+- ["FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness"](https://arxiv.org/abs/2205.14135), Dao and others, 2022. Works out exactly the same attention in small blocks that fit in the chip's fast memory, so the large intermediate grids never have to be written out. It is the clearest example of chapter 5's point that fetching, not arithmetic, is what costs.
+- ["Roofline: An Insightful Visual Performance Model for Multicore Architectures"](https://doi.org/10.1145/1498765.1498785), Williams, Waterman and Patterson, 2009. Where the chart of two limits comes from. It was written about ordinary processors, years before any of this, and applies unchanged. My addition.
+- ["Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer"](https://arxiv.org/abs/1701.06538), Shazeer and others, 2017. An early version of Mixture of Experts: a small gate chooses a few experts out of many for each input.
+
+## Hardware and software
+
+For [chapter 6](/inference-engineering/gpus) and [chapter 7](/inference-engineering/software-stack).
+
+- [GPU Glossary](https://modal.com/gpu-glossary), Modal, 2025. A free online reference for the vocabulary of GPU hardware and CUDA.
+- The three engines: [vLLM](https://github.com/vllm-project/vllm), [SGLang](https://github.com/sgl-project/sglang) and [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM). Their documentation is where the ideas in these notes turn into settings.
+- [The PyTorch profiler recipe](https://docs.pytorch.org/tutorials/recipes/recipes/profiler_recipe.html). A short official walkthrough of the profiler I used in chapter 7.
+
+## The techniques
+
+For chapters [8](/inference-engineering/quantization), [9](/inference-engineering/speculative-decoding), [10](/inference-engineering/kv-cache) and [11](/inference-engineering/many-gpus).
+
+- ["LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale"](https://arxiv.org/abs/2208.07339), Dettmers and others, 2022. Shows that a handful of unusually large values is what breaks 8-bit rounding in big models, and deals with those values separately. It is the one large number from my eight-number figure, found in real networks.
+- ["GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers"](https://arxiv.org/abs/2210.17323), Frantar and others, 2022. Rounds a model one layer at a time, and uses a small sample of real text to adjust the remaining weights for the error each rounding introduces. This is the careful calibration my experiment left out.
+- ["Fast Inference from Transformers via Speculative Decoding"](https://arxiv.org/abs/2211.17192), Leviathan, Kalman and Matias, 2022. The draft-and-check idea, with the argument for why the output is exactly what the big model would have produced alone.
+- ["EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty"](https://arxiv.org/abs/2401.15077), Li and others, 2024. Drafting from the big model's own internal vectors instead of from the text.
+- ["Break the Sequential Dependency of LLM Inference Using Lookahead Decoding"](https://arxiv.org/abs/2402.02057), Fu and others, 2024. Guessing without a draft model, from sequences collected while the model writes.
+- ["Efficient Memory Management for Large Language Model Serving with PagedAttention"](https://arxiv.org/abs/2309.06180), Kwon and others, 2023. Stores the KV cache in fixed-size blocks, the way an operating system pages memory. This is the paper vLLM grew out of.
+- ["Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism"](https://arxiv.org/abs/1909.08053), Shoeybi and others, 2019. Written about training, but it is where splitting every layer across GPUs, the tensor parallelism of chapter 11, is laid out.
+- ["DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving"](https://arxiv.org/abs/2401.09670), Zhong and others, 2024. Makes the case for putting prefill and decode on separate GPUs, and measures what it buys. My addition.
+
+## Other kinds of model
+
+For [chapter 12](/inference-engineering/other-modalities).
+
+- ["High-Resolution Image Synthesis with Latent Diffusion Models"](https://arxiv.org/abs/2112.10752), Rombach and others, 2021. The paper behind Stable Diffusion: denoise a small latent grid instead of the pixels.
+- ["Classifier-Free Diffusion Guidance"](https://arxiv.org/abs/2207.12598), Ho and Salimans, 2022. Why every step of an image model is two passes, one with the prompt and one without. My addition.
+- ["Robust Speech Recognition via Large-Scale Weak Supervision"](https://arxiv.org/abs/2212.04356), Radford and others, 2022. The Whisper paper: an encoder that listens and a decoder that writes.
+- ["Matryoshka Representation Learning"](https://arxiv.org/abs/2205.13147), Kusupati and others, 2022. How an embedding model is trained so that a shortened vector still works.
+
+## Running it
+
+For [chapter 13](/inference-engineering/autoscaling) and [chapter 14](/inference-engineering/operations).
+
+- [*Site Reliability Engineering*](https://sre.google/books/), edited by Beyer and others, 2017. Google's book on running services that must not go down, free to read online. None of it is about AI and nearly all of it applies.
+- ["The Llama 3 Herd of Models"](https://arxiv.org/abs/2407.21783), Grattafiori and others, 2024. Where the failure numbers in chapter 14 come from. Its section on training infrastructure has the breakdown of what went wrong.
+
+## The models I measured
+
+Every measurement in these notes was made on two small open models. Both are my additions to the list.
+
+- [GPT-2](https://huggingface.co/openai-community/gpt2), OpenAI, 2019. The smallest version, with 124 million weights. Small enough to run on a laptop with no GPU, and built the same way as the models that came after it.
+- [DistilGPT-2](https://huggingface.co/distilbert/distilgpt2), Hugging Face, 2019. A smaller model made from GPT-2 by [distillation](/inference-engineering/know-your-workload#the-cheapest-speed-up-is-a-smaller-model). It was the guesser in [the speculative decoding experiment](/inference-engineering/speculative-decoding#watching-it-happen).

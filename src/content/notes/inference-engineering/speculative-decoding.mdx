@@ -4,7 +4,7 @@ short: Speculative decoding
 description: Writing a token is slow. Checking a token somebody else wrote is nearly free. Speculative decoding uses that gap to get several tokens out of one pass through the model.
 date: 2026-11-26
 series: inference-engineering
-chapter: 8
+chapter: 9
 book:
   - where: Section 5.2, Speculative Decoding (pp. 129–131)
     what: The shared mechanism, the three factors that decide the gain, and why it stops helping at large batch sizes.
@@ -20,7 +20,7 @@ import { count } from '../../../lib/calcs';
 
 export const names = ['A fact', 'A story', 'Some code', 'A list'];
 
-Something in [chapter 4](/inference-engineering/prefill-and-decode) is worth going back to. While a model writes, most of the chip's ability to calculate sits idle, waiting for weights to arrive from memory.
+Something in [chapter 5](/inference-engineering/prefill-and-decode) is worth going back to. While a model writes, most of the chip's ability to calculate sits idle, waiting for weights to arrive from memory.
 
 Batching uses that idle time for other people's requests. But what if I only care about one person? Is there a way to spend the spare calculating on *their* next few tokens?
 
@@ -117,6 +117,8 @@ There are several ways to produce a draft, and they differ mainly in how cheap a
 **A purpose-built guesser.** EAGLE is a small network trained for one job only: drafting for a specific big model. Its trick is what it reads. An ordinary small model starts again from the text. EAGLE is fed the big model's internal state, the vectors it has already computed, so it starts from everything the big model knows so far. It can draft around eight tokens with a high hit rate, and the book calls it the default choice today.
 
 **No model at all.** For code, something much simpler works. Remember the sequences that appear in the prompt, and when the output starts repeating one, propose the rest of it. If you ask a model to change one line in a file, most of its output is copied from the input. A lookup table can draft ten or more of those tokens at almost no cost.
+
+A relative of this, called lookahead decoding, fills its table from what the model is writing as it goes, so it does not depend on the prompt repeating itself. It pays for that with extra calculation, which makes it a fit for systems with compute to spare.
 
 ## What it cannot do
 

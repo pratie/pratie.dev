@@ -4,12 +4,12 @@ short: GPUs
 description: Three numbers decide what a GPU can serve and how fast. How much it can calculate, how much it can hold, and how quickly it can move what it holds.
 date: 2026-11-26
 series: inference-engineering
-chapter: 5
+chapter: 6
 book:
   - where: Section 3.1, GPU Architecture (pp. 74–77)
     what: Streaming multiprocessors, Tensor Cores, dense versus sparse FLOPS, VRAM and the cache levels.
   - where: Section 3.2, GPU Architecture Generations (pp. 77–83)
-    what: Hopper, Lovelace, Blackwell and Rubin, with the spec tables these numbers come from.
+    what: Hopper, Lovelace, Blackwell and Rubin, with the spec tables these numbers come from, and NVIDIA's own CPUs.
   - where: Sections 3.3 to 3.5 (pp. 83–91)
     what: Instances, multi-GPU nodes and their interconnects, multi-instance GPUs, other accelerators, local inference.
 ---
@@ -30,6 +30,14 @@ A CPU is a handful of very capable workers. Each can do complicated, branching w
 A GPU is tens of thousands of simple workers who all do the same small thing at the same moment. The book calls GPUs throughput machines, and that is the right picture.
 
 Running a model is almost nothing except multiplying and adding enormous grids of numbers. Every multiplication is independent of its neighbours. That is exactly the kind of work you can hand to ten thousand simple workers at once, and exactly the kind a few clever ones are wasted on.
+
+## Inside the chip
+
+The workers come in groups. An H100 has 132 of these groups, called **streaming multiprocessors**, and each holds a few kinds of worker. The kind that matters here is the **Tensor Core**. It is built for one instruction: multiply two grids of numbers and add the result to a third. That instruction is most of what running a model consists of, so when a spec sheet quotes compute for AI, it is counting Tensor Cores.
+
+Memory comes in two kinds as well. The big one is the GPU's main memory, the tens or hundreds of gigabytes where the weights live. It sits next to the chip, not on it. On the chip itself are small and very fast scratchpads called caches. An H100 has 256 KB for each group of workers and 50 MB shared between all of them. Anything a worker touches has to be carried from the big memory into those scratchpads first.
+
+That is the physical reason behind [the last chapter](/inference-engineering/prefill-and-decode). Weights are measured in gigabytes and the fast memory in megabytes, so the weights can never stay on the chip. They stream across it, all of them, once for every pass.
 
 ## The three numbers
 
@@ -78,7 +86,7 @@ Look at the H100 and the H200. Same compute. The H200 has more memory and moves 
 
 A name like B200 has two parts.
 
-The **letter** is the generation, which NVIDIA calls an architecture and names after a scientist: A for Ampere, H for Hopper, L for Lovelace, B for Blackwell, with Rubin arriving in 2026. A new one comes out every year or two.
+The **letter** is the generation, which NVIDIA calls an architecture and names after a scientist: A for Ampere, H for Hopper, L for Lovelace, B for Blackwell, with Rubin arriving in 2026 and Feynman promised for 2028. A new one comes out every year or two.
 
 The **number** is the size within that generation. Bigger means more powerful and more expensive. The numbers do not follow much logic beyond that.
 
@@ -91,6 +99,10 @@ One detail about Rubin caught my eye. It comes with a separate chip built for co
 In the cloud, the thing you rent is an **instance**: a virtual machine with one or more GPUs, plus CPUs, ordinary RAM, disk, a network connection and the wiring between the GPUs.
 
 Any of those can turn out to be the slow part. The book's example is small and telling. The same A100 GPU comes in two physical forms, and one has five percent more memory bandwidth than the other. Two instances with the same GPU name are not always the same machine.
+
+One of those other parts deserves a second look: the CPU. NVIDIA makes its own, called Grace, and sells it joined to its GPUs as a single unit. That is the G in names like GH200 and GB200. What matters for inference is the link between the two, which carries up to 900 GB/s, several times more than the usual connection between a CPU and a GPU.
+
+Why would that matter? Because the ordinary RAM beside a GPU is far bigger than the GPU's own memory. That makes it a good place to park things that do not fit, such as [the caches from earlier requests](/inference-engineering/kv-cache#where-to-keep-it), and a fast link makes fetching them back quick. For the Rubin generation the CPU is called Vera.
 
 ## More than one GPU
 
@@ -115,7 +127,7 @@ What matters is how fast those wires are compared with the memory inside a singl
 
 Inside a GPU, data moves at thousands of gigabytes a second. Between two GPUs in the same box, at a quarter of that. Between two boxes, the bar is hard to see.
 
-Hold on to this picture. It decides how a model can be split across GPUs, which is [chapter 10](/inference-engineering/many-gpus). Anything that makes GPUs talk to each other constantly has to live inside one node.
+Hold on to this picture. It decides how a model can be split across GPUs, which is [chapter 11](/inference-engineering/many-gpus). Anything that makes GPUs talk to each other constantly has to live inside one node.
 
 It also puts my laptop in its place. Its memory is about as fast as the cable between two datacenter machines, and about {count(3350 / membw.read_gbs)} times slower than the memory in one H100.
 
@@ -133,7 +145,7 @@ NVIDIA dominates, but plenty of companies make chips for inference. What helped 
 - **Power.** Some chips aim to do the same work for less electricity.
 - **Integration.** Google's TPUs and Amazon's chips are built to work closely with their own clouds.
 
-They also share a problem, and it is not the silicon. Nearly all inference software is written for NVIDIA's programming system, CUDA. A chip without it has to bring its own software for everything. That is the subject of [the next chapter](/inference-engineering/software-stack).
+They also share a problem, and it is not the silicon. Nearly all inference software is written for NVIDIA's programming system, CUDA. A chip without it has to bring its own software for everything. That is the subject of [the next chapter](/inference-engineering/software-stack). The book adds two more hurdles that have nothing to do with design: making chips this complicated at all, and getting enough of them installed in datacenters to be worth building on.
 
 ## Running it on your own machine
 
@@ -144,6 +156,12 @@ The limits are the obvious ones: far less power, heat, battery, and endless vari
 The book has one comparison I liked. A top consumer NVIDIA card has 32 GB of memory at 1,792 GB/s. Apple's largest desktop chip has 512 GB at 819 GB/s. Using the three numbers, you can read that directly: the Apple machine can hold enormous models and will write with them slowly, and the NVIDIA card can hold only small ones and will write with them quickly.
 
 My own laptop sits far below both, which is exactly why GPT-2 is the model I can measure on it.
+
+Mixture of Experts models are a help on a desk, the book points out. One person's request only wakes a fraction of the weights, so a big model of that kind is less work for a single user than its size suggests.
+
+Phones are where most on-device inference happens today, and they are far more limited. Even an expensive phone struggles with a model of more than a billion or two parameters. What fits are small, focused jobs where a delay would be noticed: turning speech into text, reading text aloud, translating. Both phone platforms now ship their own tools for building this into an app.
+
+The book's view is that this is not a contest. Small models and quick questions will run on the device in your hand, and the heavy work will stay in a datacenter.
 
 ## Where this leaves us
 

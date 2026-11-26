@@ -1,0 +1,74 @@
+---
+// A stack of layers, top to bottom, each with a name and one line on what it does.
+import Figure from './Figure.astro';
+
+interface Layer {
+  name: string;
+  note: string;
+  /** examples of real things at this layer */
+  eg?: string;
+}
+
+interface Props {
+  layers: Layer[];
+  top?: string;
+  bottom?: string;
+}
+
+const { layers, top, bottom } = Astro.props;
+---
+
+<Figure>
+  {top && <p class="fig-label end">{top}</p>}
+  <ol class="stack">
+    {
+      layers.map((layer) => (
+        <li class="sheet">
+          <strong>{layer.name}</strong>
+          <span>{layer.note}</span>
+          {layer.eg && <small>{layer.eg}</small>}
+        </li>
+      ))
+    }
+  </ol>
+  {bottom && <p class="fig-label end">{bottom}</p>}
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .stack {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .stack li {
+    display: grid;
+    gap: 0.15rem;
+    margin: 0;
+    font-family: var(--font-text);
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+
+  .stack strong {
+    font-weight: 700;
+  }
+
+  .stack small {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--ink-2);
+  }
+
+  .end {
+    text-align: center;
+  }
+
+  .end + .stack,
+  .stack + .end {
+    margin-top: 0.6rem;
+  }
+</style>

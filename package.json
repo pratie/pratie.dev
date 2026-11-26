@@ -10,7 +10,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "astro build && node scripts/smoke.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.3.10",
@@ -23,5 +24,8 @@
     "katex": "^0.16.47",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1"
   }
 }

@@ -591,7 +591,7 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Margin labels at 60rem and wider."
+        "purpose": "Margin labels at 64rem and wider."
       },
       "data": {
         "displayName": "Data",
@@ -670,11 +670,11 @@
       },
       {
         "name": "margin",
-        "value": "60rem"
+        "value": "64rem"
       },
       {
         "name": "bleed",
-        "value": "76rem"
+        "value": "78rem"
       }
     ]
   },
@@ -764,7 +764,7 @@
     "northStar": "The Engineer's Notepad",
     "overview": "The site is one sheet of warm paper ruled off by a single legal-pad margin line. Reading happens in a 41rem text column to the right of that line; the margin to its left holds only what a margin holds on a real pad: a short label for the block beside it, or the contents of the note being read. Everything on the sheet is made with five writing tools: ink, one blue pen, one yellow highlighter, a red pencil, and a five-colour highlighter set that exists only to tell token chips apart.\n\nFigures are the second material. Anything the reader operates sits on a dot-grid panel in the field colour, set in the mono cut with tabular numerals; inside a panel, a plain paper \"sheet\" gives a clean ground to anything that needs one. A figure is always the same small vocabulary: a token is a chip, a probability is a horizontal bar on an absolute scale, a vector is a row of number cells. The page is calm so that the figure is the only thing asking to be touched.\n\nThe world is light by default regardless of the system setting, because the owner asked for a light notepad; a toggle in the header stores a dark variant with every token remapped. The earlier dark, heavy-type portfolio was rejected by the owner as too heavy, and that rejection is the one confirmed anti-reference: nothing here is loud, large, or dark by default.",
     "keyCharacteristics": [
-      "One warm paper ground with a single 1px margin line at 60rem and wider; no cards, bands, or section backgrounds on the page itself.",
+      "One warm paper ground with a single 1px margin line at 64rem and wider; no cards, bands, or section backgrounds on the page itself.",
       "One type family in two sibling cuts, two weights (400 and 700), sentence case throughout.",
       "Colour is a set of tools with fixed jobs; a colour that is not doing its job is not on the page.",
       "Flat: hairlines and tonal layering, no drop shadows.",
@@ -832,7 +832,7 @@
       "Do keep the default light. With no stored choice the site renders the light tokens whatever the system prefers; dark is something the reader turns on.",
       "Do give every new colour use to an existing tool: pen for links, focus and the measured thing; yellow for attention and newly added; red for negatives and failures; second ink for everything quiet.",
       "Do build figures from the shared parts: panel, sheet, chip, bar row, number cell, button, slider. A new figure should look like it came from the same pad as the others.",
-      "Do put a label in the margin only when it names the block beside it, and let it fall back above the block below 60rem.",
+      "Do put a label in the margin only when it names the block beside it, and let it fall back above the block below 64rem.",
       "Do set anything counted or typed in Mono with tabular numerals, and switch back to Quattro for a sentence inside a figure.",
       "Do draw edges with 1px lines in the rule colour, and use a dashed line for a separation inside a block.",
       "Do keep text in figures at 0.75rem or larger and body-coloured text at 4.5:1 or better in both themes.",

@@ -109,7 +109,7 @@ rounded:
 spacing:
   gutter: "1.25rem"
   gutter-wide: "2rem"
-  margin-w: "10.5rem"
+  margin-w: "16rem"
   text-w: "41rem"
   bleed: "9rem"
   stack: "1rem"
@@ -216,14 +216,14 @@ components:
 
 **Creative North Star: "The Engineer's Notepad"**
 
-The site is one sheet of warm paper ruled off by a single legal-pad margin line. Reading happens in a 41rem text column to the right of that line; the margin to its left holds only what a margin holds on a real pad: a short label for the block beside it, or the contents of the note being read. Everything on the sheet is made with five writing tools: ink, one blue pen, one yellow highlighter, a red pencil, and a five-colour highlighter set that exists only to tell token chips apart.
+The site is one sheet of warm paper ruled off by a single legal-pad margin line. Reading happens in a 41rem text column to the right of that line. On wide screens the margin to its left holds the rail: a plain list of every note on the site, with the sections of the note being read nested under it. Everything on the sheet is made with five writing tools: ink, one blue pen, one yellow highlighter, a red pencil, and a five-colour highlighter set that exists only to tell token chips apart.
 
 Figures are the second material. Anything the reader operates sits on a dot-grid panel in the field colour, set in the mono cut with tabular numerals; inside a panel, a plain paper "sheet" gives a clean ground to anything that needs one. A figure is always the same small vocabulary: a token is a chip, a probability is a horizontal bar on an absolute scale, a vector is a row of number cells. The page is calm so that the figure is the only thing asking to be touched.
 
 The world is light by default regardless of the system setting, because the owner asked for a light notepad; a toggle in the header stores a dark variant with every token remapped. The earlier dark, heavy-type portfolio was rejected by the owner as too heavy, and that rejection is the one confirmed anti-reference: nothing here is loud, large, or dark by default.
 
 **Key Characteristics:**
-- One warm paper ground with a single 1px margin line at 60rem and wider; no cards, bands, or section backgrounds on the page itself.
+- One warm paper ground with a single 1px margin line at 64rem and wider; no cards, bands, or section backgrounds on the page itself.
 - One type family in two sibling cuts, two weights (400 and 700), sentence case throughout.
 - Colour is a set of tools with fixed jobs; a colour that is not doing its job is not on the page.
 - Flat: hairlines and tonal layering, no drop shadows.
@@ -286,7 +286,7 @@ Syntax highlighting in code blocks uses four further hues (constant, string, fun
 - **Body** (400, 1.0625rem, 1.65): prose, capped by the 41rem text column. Pretty wrapping.
 - **Body small** (400, 0.9375rem, 1.55): note blurbs, the project list, link boxes, header nav, prose sentences that appear inside a figure panel.
 - **Caption** (400, 0.875rem, 1.55): figure captions and the footer, in second ink; `strong` inside a caption returns to ink.
-- **Label** (700, 0.875rem, 1.4): margin labels at 60rem and wider. Below that the same heading sits above its block at 1.0625rem.
+- **Label** (700, 1.0625rem, 1.4): the small heading over a list: section labels on the front page, "Read first", "In the book" and "Goes deeper" on a note. Rail titles are the same weight at 0.8125rem.
 - **Data** (Mono 400, 0.875rem, 1.5, tabular numerals): everything inside a figure panel by default.
 - **Data small** (Mono 400, 0.8125rem): figure labels, buttons, dates and reading times, code blocks (line-height 1.6), pipeline stages, the contents rail size.
 - **Data extra small** (Mono 400, 0.75rem): axis and column heads, token ids, per-chip weights. This is the floor.
@@ -300,9 +300,9 @@ Syntax highlighting in code blocks uses four further hues (constant, string, fun
 
 The page is a single sheet, centred in the viewport once it reaches its maximum width of margin + text column + bleed + two gutters. The text column is 41rem (`text-w`) and everything outside a figure respects it: header, prose, link boxes, footer.
 
-- **Below 60rem** there is no margin and no margin line. Gutters are 1.25rem. Section labels sit above their block as ordinary headings, and a note's contents fold into a bordered disclosure above the text.
-- **At 60rem and wider** a 10.5rem margin opens on the left, gutters grow to 2rem, and the 1px margin line runs the full height of the page, 1.5rem left of the text column. Margin content is 7.5rem wide, right-aligned, 2.5rem clear of the text. On the front page the margin holds section labels (Notes, Projects, Elsewhere). On a note it holds the labels of the link boxes (Read first, Goes deeper, Related) and the sticky contents list, which marks the section being read in bold ink.
-- **At 76rem and wider** a 9rem bleed opens on the right. Only a figure or code block marked wide may extend into it.
+- **Below 64rem** there is no margin, no margin line and no rail. Gutters are 1.25rem. A note's contents fold into a bordered disclosure above the text, and a chapter ends with previous and next links.
+- **At 64rem and wider** a 16rem margin opens on the left, gutters grow to 2rem, and the 1px margin line runs the full height of the page, 1.5rem left of the text column. The margin holds the rail: 12.5rem wide, left-aligned, sticky to the top of the viewport and scrolling within itself if it is taller than the screen. It lists stand-alone notes, then each series with numbered chapters. The note being read is bold ink, with its `##` sections nested under it behind a 1px rule; the section in view is pen blue. A 9rem bleed for wide figures opens on the right from 78rem.
+- **At 78rem and wider** a 9rem bleed opens on the right. Only a figure or code block marked wide may extend into it.
 
 Vertical rhythm, as built: header to content 3.5rem; front-page sections 4rem apart; prose blocks 1.15em apart; 3.5rem above a headline and 2.5rem above a title, 0.75em below either; 2.25rem above and below a figure in prose; 5rem above the footer. Inside a figure panel, children stack 1rem apart; panel padding is 1.1rem, 1.5rem from 40rem.
 
@@ -311,7 +311,7 @@ The front page and notes index open with the name or title at the top of the tex
 Figure-internal layouts add two local breakpoints (34rem and 46rem) to reflow grids of cells and side-by-side panes. A figure never causes horizontal page scroll at 390px; a long code block scrolls inside itself.
 
 ### Named Rules
-**The Margin Rule.** The margin holds a label for the block beside it or the contents of the page. Nothing else goes there: no dates, no notes-to-self, no ornaments. When there is no room for a margin, there is no margin line.
+**The Margin Rule.** The margin holds the rail and nothing else: no dates, no notes-to-self, no ornaments. The rail is navigation, the same on every page. When there is no room for a margin, there is no margin line.
 
 **The Bleed Rule.** Prose never leaves the text column. Only a figure or code block that needs the width takes the bleed.
 
@@ -359,7 +359,7 @@ A token is always a chip.
 ### Cards / Containers
 - **Figure panel:** field ground with a 1rem dot grid, 1px rule border, 10px corners, padding 1.1rem (1.5rem from 40rem), Mono 0.875rem with tabular numerals, children stacked 1rem apart. Its caption sits below, outside the panel, in the text face at 0.875rem, and says whether the numbers are real model output or made up.
 - **Sheet:** paper ground, 1px rule border, 8px corners, padding 0.75rem 0.85rem. Used inside a panel for running text, tables, or anything that would fight the dots.
-- **Link box:** not a box. A list between two dashed rule lines (1rem padding above and below), with its label in the margin.
+- **Link box:** not a box. A list between two dashed rule lines (1rem padding above and below), under a small bold label. Each entry is a link on its own line with one line of second-ink text below it.
 - **Code block:** field ground, 1px rule border, 10px corners, padding 1rem 1.1rem, Mono 0.8125rem at 1.6, horizontal scroll inside. Code is read from the tested source file, never retyped.
 - **Contents disclosure (narrow screens):** 1px rule border, 8px corners, bold summary, numbered list.
 
@@ -371,7 +371,7 @@ A token is always a chip.
 ### Navigation
 - **Header:** the handle in bold ink at the left, no underline; at the right two links (0.9375rem, second ink, no underline) and the theme toggle. Hover and the current page turn the link ink with a 2px pen underline.
 - **Theme toggle:** a 2.25rem square ghost button with a 16px half-filled circle; hover gives it the field ground; the icon turns 180 degrees when dark is on. The choice is stored; with nothing stored the site is light.
-- **Contents rail:** 0.8125rem, second ink, no underline, right-aligned in the margin, sticky 2rem from the top. Hover is ink with an underline; the section being read is bold ink.
+- **Rail:** 0.8125rem, second ink, no underline, left-aligned in the margin. Group titles are bold ink and link to their index. Chapter numbers are Mono in a 1.5rem column. Hover is ink with an underline; the current note is bold ink; the section in view is pen blue.
 - **Body links:** pen blue, 1px underline offset 0.2em, thickening to 2px on hover.
 - **Footer:** a 1px rule line, then the domain at left and two links at right in 0.875rem second ink.
 
@@ -398,7 +398,7 @@ A strip of stages joined by small drawn arrows, set directly in the prose rather
 - **Do** keep the default light. With no stored choice the site renders the light tokens whatever the system prefers; dark is something the reader turns on.
 - **Do** give every new colour use to an existing tool: pen for links, focus and the measured thing; yellow for attention and newly added; red for negatives and failures; second ink for everything quiet.
 - **Do** build figures from the shared parts: panel, sheet, chip, bar row, number cell, button, slider. A new figure should look like it came from the same pad as the others.
-- **Do** put a label in the margin only when it names the block beside it, and let it fall back above the block below 60rem.
+- **Do** keep the rail identical on every page, and let it disappear entirely below 64rem.
 - **Do** set anything counted or typed in Mono with tabular numerals, and switch back to Quattro for a sentence inside a figure.
 - **Do** draw edges with 1px lines in the rule colour, and use a dashed line for a separation inside a block.
 - **Do** keep text in figures at 0.75rem or larger and body-coloured text at 4.5:1 or better in both themes.

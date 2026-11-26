@@ -1,0 +1,60 @@
+---
+// The left rail on wide screens: every note on the site, with the sections of the one being read.
+import { allNotes, inSeries, noteUrl, standalone } from '../lib/notes';
+import { SERIES } from '../data/series';
+
+interface Props {
+  /** id of the note being read, if any */
+  current?: string;
+  /** its sections, shown nested under it and marked as the reader scrolls */
+  headings?: { slug: string; text: string }[];
+}
+
+const { current, headings = [] } = Astro.props;
+const notes = await allNotes();
+const groups = [
+  { href: '/notes', title: 'Notes', numbered: false, notes: standalone(notes) },
+  ...Object.entries(SERIES).map(([id, series]) => ({
+    href: `/${id}`,
+    title: series.title,
+    numbered: true,
+    notes: inSeries(notes, id),
+  })),
+].filter((group) => group.notes.length > 0);
+const path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/$/, '');
+---
+
+<aside class="rail" aria-label="All notes">
+  <div class="rail-inner">
+    {
+      groups.map((group) => (
+        <nav aria-label={group.title}>
+          <p class="rail-title">
+            <a href={group.href} aria-current={path === group.href ? 'page' : undefined}>
+              {group.title}
+            </a>
+          </p>
+          <ol class:list={{ numbered: group.numbered }}>
+            {group.notes.map((note) => (
+              <li>
+                <a href={noteUrl(note.id)} aria-current={note.id === current ? 'page' : undefined}>
+                  {group.numbered && <span class="num">{note.data.chapter}</span>}
+                  <span>{note.data.short ?? note.data.title}</span>
+                </a>
+                {note.id === current && headings.length > 1 && (
+                  <ol class="sections">
+                    {headings.map((h) => (
+                      <li>
+                        <a href={`#${h.slug}`}>{h.text}</a>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      ))
+    }
+  </div>
+</aside>

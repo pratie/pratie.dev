@@ -1,0 +1,50 @@
+---
+// "In the book": where the series' source covers what this note covered, and a clear credit.
+import { SERIES } from '../data/series';
+
+interface Props {
+  series: string;
+  refs: { where: string; what: string }[];
+}
+
+const { series, refs } = Astro.props;
+const book = SERIES[series]?.book;
+---
+
+{
+  book && (
+    <section class="links-box row" aria-labelledby="in-the-book">
+      <h2 class="side" id="in-the-book">In the book</h2>
+      {refs.length > 0 && (
+        <ul>
+          {refs.map((ref) => (
+            <li>
+              <strong>{ref.where}</strong> <span>{ref.what}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p class="credit">
+        This note follows <a href={book.url} rel="noopener"><cite>{book.title}</cite></a> by {book.author} ({book.publisher}).
+        The wording, examples and figures are mine. The book goes further on every topic here.
+      </p>
+    </section>
+  )
+}
+
+<style>
+  .credit {
+    margin: 0.9rem 0 0;
+    color: var(--ink-2);
+  }
+
+  ul + .credit {
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--rule);
+  }
+
+  strong {
+    display: block;
+    font-weight: 700;
+  }
+</style>

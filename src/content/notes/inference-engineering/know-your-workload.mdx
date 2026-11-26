@@ -1,0 +1,122 @@
+---
+title: Before making it fast, decide what fast means
+short: Know your workload
+description: Faster for whom? Cheaper per what? How slow is too slow? The answers decide almost every engineering choice that comes after.
+date: 2026-11-26
+series: inference-engineering
+chapter: 2
+book:
+  - where: Chapter 1, sections 1.1 and 1.2 (pp. 25–31)
+    what: Shared versus dedicated inference, the kinds of AI application, online versus offline, consumer versus business.
+  - where: Section 1.3, Model Selection (pp. 31–35)
+    what: Evaluation, fine-tuning and distillation as ways to end up with a smaller model.
+---
+
+import CalcFig from '../../../components/figures/CalcFig.astro';
+
+The tempting thing is to skip straight to the tricks. Quantize it, cache it, make the number go up.
+
+The book does something else first. It spends a whole chapter on a question that sounds too simple to need one: what do you actually want? That looks like a detour until you see why it comes first. Nearly every optimisation in this series is a trade. You give up a little of one thing to get more of another. You cannot make a trade well if you do not know what you value.
+
+## You cannot be the best at everything
+
+Think about three ways to move parcels: a motorbike courier, a delivery van and a freight train.
+
+The courier gets one parcel across town sooner than anything else. The train moves more parcels per day than anything else, and each one takes days. The van is in between. All three are "fast", and asking which is fastest is the wrong question until you say whether you care about one parcel or a million.
+
+An inference system is the same. The three things you can trade against each other are:
+
+- **Latency.** How long one person waits for their answer.
+- **Throughput.** How much work the whole system gets through per second, which decides what each answer costs you.
+- **Quality.** How good the answers are.
+
+Most techniques move one of these at the expense of another. Batching raises throughput and hurts latency. Quantization helps both and puts quality at risk. Choosing between them is the actual work.
+
+## Five things to know about your own product
+
+The book gives a list of what you should know before starting. In my words:
+
+1. **Which model?** You optimise a particular model, so this comes first.
+2. **What goes in and what comes out?** A chat message, a whole codebase, an audio stream. Text streamed word by word, or one block of JSON.
+3. **How long will a user wait?** Measured from their click to the result on their screen, not from your server's point of view.
+4. **What may a request cost?** Per request, per user or per month, whichever your business thinks in.
+5. **How many people, and when?** Steady all day, or a spike every morning at nine.
+
+Early in a product you often cannot answer these. The book's advice for that stage is refreshingly plain: do not do inference engineering yet. Use an API that someone else runs.
+
+## Rent tokens or rent GPUs?
+
+There are two ways to get a model into your product.
+
+With **shared inference** you call a public endpoint and pay for each token. There is nothing to set up, nothing to keep running, and the bill is zero when nobody uses your product. In exchange, you share the hardware with strangers, you cannot make it faster, and your product is only as reliable as the provider.
+
+With a **dedicated deployment** you rent GPUs by the hour and run the model yourself. Now the speed, the model and the uptime are yours to control. So is the bill, which arrives whether or not anyone showed up.
+
+That last part is the heart of it. Try some numbers.
+
+<CalcFig
+  calc="breakeven"
+  inputs={[
+    { id: 'millions', label: 'Tokens per day', min: 1, max: 1000, value: 20, unit: 'M' },
+    { id: 'price', label: 'API price per million, in dollars', min: 0.1, max: 5, step: 0.1, value: 0.6 },
+    { id: 'rent', label: 'GPU rent per hour, in dollars', min: 0.5, max: 10, step: 0.5, value: 2.5 },
+    { id: 'speed', label: 'Tokens/s from one busy GPU', min: 100, max: 10000, step: 100, value: 2500 },
+    { id: 'busy', label: 'How busy you can keep it', min: 5, max: 100, step: 5, value: 60, unit: '%' },
+  ]}
+>
+
+**Paying per token against paying per hour.** The prices are invented but in a realistic range. Drag "Tokens per day" up and watch where the two lines cross.
+
+</CalcFig>
+
+At 20 million tokens a day the API costs a fifth of what one GPU does, because most of that GPU's day is spent idle. Push the volume up and at some point the GPU is busy enough to win. Then drag "How busy you can keep it" down and watch the advantage disappear again.
+
+So the question is less "which is cheaper?" and more "can I keep my GPUs busy?". The book names three reasons a product ends up moving to dedicated hardware:
+
+- **Scale.** There is enough traffic that the GPUs stay busy.
+- **Specialisation.** You run your own fine-tuned model, or you need a speed or an uptime that no shared endpoint offers.
+- **Orchestration.** One user action triggers several models in a row, and you want them next to each other instead of scattered across the internet.
+
+If none of these is true yet, the API is cheaper and it is less work.
+
+## What kind of thing are you building?
+
+The right target depends heavily on the product. A few examples make this concrete.
+
+| Product | What "fast" means there |
+| --- | --- |
+| Chat | The first word must appear quickly. After that, reading speed is enough. |
+| Voice conversation | The whole round trip, hearing to speaking, has to feel like a person. |
+| Agent | One click can mean fifty model calls. Only the total matters. |
+| Tab completion | The whole suggestion has to land between two keystrokes. |
+| Overnight document processing | Nobody is waiting. Only the cost per document matters. |
+
+The last row is a different animal from the others, and the book gives the split a name. **Online** work has a person waiting on every request, so you tune for latency. **Offline** work has no one waiting, so you pack the GPU as full as it will go and tune for throughput.
+
+One model can be used both ways. Transcribing a live call and transcribing last year's recordings can use the very same weights. If there is enough of both, the book's advice is to run two separate deployments, each tuned for its own job, instead of one that is mediocre at both.
+
+Who the users are matters too. A consumer app tends to be spiky and cost-sensitive: one viral post and traffic is ten times higher overnight. A business product tends to be steadier and less forgiving, because it sits inside somebody else's working day. And both can be constrained by rules about where user data is allowed to go, which narrows the list of datacenters before you have made a single technical decision.
+
+## The cheapest speed-up is a smaller model
+
+This section reframes what optimisation even means.
+
+Hold everything else fixed: same hardware, same software, same tricks. A model with fewer parameters is faster and cheaper than one with more. Always. So the biggest decision in the whole field is made before any engineering starts. Which model?
+
+The rule the book gives is short. Find the smallest model that is good enough for your task.
+
+"Good enough" is carrying a lot there, and it needs a definition you can test. That is what **evals** are: a set of examples from your own product with a way to score the answers. Public benchmarks are fine for making a shortlist. They cannot tell you how a model does on your task, and once every lab is competing on a benchmark, the scores stop meaning much anyway.
+
+Evals matter twice in this series. First, to check that the model is worth making fast at all. Second, as the "before" picture. Some optimisations, quantization especially, can quietly make answers worse, and without a baseline you would never know.
+
+Once you have evals, two techniques let a small model stand in for a large one.
+
+**Fine-tuning** takes an existing model and trains it further on examples of your task. The model keeps its shape and its weights shift. The book's example is turning English questions into SQL. SQL is a small, strict language, so a model with a few billion parameters, fine-tuned on it, can match a general model a hundred times its size on that one job.
+
+**Distillation** uses a big model as a teacher for a small one. The student does not only see the teacher's answers. It sees the full list of probabilities the teacher gave to every possible next token, which carries far more information than the one token that was picked. The book notes that this is used less often than fine-tuning. Labs that release a family of sizes usually train each size separately.
+
+## Where this leaves us
+
+Before touching a GPU, I should be able to say which model I am serving, who waits for it and for how long, and what an answer is allowed to cost. Then the trades have something to be measured against.
+
+Which raises the next problem. To say "how long", I need to be precise about what I am timing. That turns out to have more than one answer.

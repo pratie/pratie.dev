@@ -43,6 +43,8 @@ possible.
 ## Operating Context
 
 - New notes are added over time; the series runs from basics to deeper topics.
+- A book the owner is studying can become a series of chapters: their own explanation of each
+  part, with pointers to the pages of the book that go deeper. The first is Inference Engineering.
 - Notes link to each other only where concepts genuinely depend on each other:
   each note lists what to read first, and the basics note is the hub.
 - Some notes are written from a source such as a video or paper. Those are
@@ -58,6 +60,8 @@ possible.
 
 ## Brand Commitments
 
+- The owner's writing brief is `WRITING.md`: a curious engineer explaining to a friend, questions
+  first, intuition before implementation, every term defined.
 - The owner asked for: minimal, "notepad style", light, with readable fonts.
   The earlier dark, heavy-type portfolio was rejected as too heavy.
 - The handle "pratie" is the only name used. No real name is published.

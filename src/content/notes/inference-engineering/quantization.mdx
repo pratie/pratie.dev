@@ -1,0 +1,150 @@
+---
+title: Quantization. The same model in fewer bits
+short: Quantization
+description: A model's weights are stored with far more precision than it needs. Rounding them makes the model smaller and faster, until quite suddenly it stops being the same model.
+date: 2026-11-26
+series: inference-engineering
+chapter: 7
+related:
+  - gpt-from-scratch
+book:
+  - where: Section 5.1 and 5.1.1, Number Formats (pp. 120–125)
+    what: Why halving precision helps both phases, the full table of number formats, dynamic range, granularity and the microscaling formats.
+  - where: Section 5.1.2, Quantization Approaches (pp. 125–127)
+    what: Quantizing during or after training, and which parts of a model are safe to quantize.
+  - where: Section 5.1.3, Measuring Quality Impact (pp. 128–129)
+    what: Perplexity, benchmarks and custom evals as the three checks.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import QuantFig from '../../../components/figures/QuantFig.astro';
+import quant from '../../../data/bench/quant.json';
+import { count } from '../../../lib/calcs';
+
+export const at = (bits) => quant.rows.find((row) => row.bits === bits);
+export const shown = quant.rows.filter((row) => row.bits <= 8);
+export const broken = (loss) => loss > quant.full.loss + 1;
+
+GPT-2's weights are stored as 32-bit numbers. That is four bytes for each of its 124 million weights, {count(quant.full.megabytes)} MB in all.
+
+Does the model need all those digits? If a weight is 0.0731849, would 0.073 do? Would 0.07?
+
+That question is the whole idea of quantization. The answer turns out to be "yes, for a surprisingly long time, and then very suddenly no".
+
+## Why fewer bits would help
+
+From the last few chapters, I can already say what smaller numbers would buy.
+
+Writing is limited by fetching. Each token needs every weight carried from memory to the chip. If each weight takes half the bytes, there is half as much to carry, and [the ceiling on tokens per second](/inference-engineering/prefill-and-decode) doubles.
+
+Reading is limited by calculating. Chips calculate faster on smaller numbers. [A GPU's FLOPS roughly double](/inference-engineering/gpus) each time the precision halves.
+
+And the model takes less memory, so it fits on a smaller GPU or leaves more room for everything else.
+
+In practice it is not a clean doubling. The book says to expect 30 to 50 percent more speed for each halving, because handling the smaller numbers has some overhead of its own. That is still a lot to get from one change.
+
+## What "fewer bits" means
+
+A number stored in 16 bits can take one of 65,536 different values. In 8 bits, 256. In 4 bits, just 16.
+
+So quantizing a weight means snapping it to the nearest point on a much coarser grid. What gets stored is the position on the grid, which is a small whole number, plus one **scale** that says how far apart the grid points are. To use the weight, you multiply the whole number by the scale.
+
+Here are eight made-up weights. Seven are small and one is large. Try storing them in 4 bits.
+
+<QuantFig>
+
+**Quantizing by hand.** "Stored" is what goes into memory. "Read back" is what the model sees when it uses the weight. Drag the bits down and watch which numbers survive.
+
+</QuantFig>
+
+Two things jumped out at me here.
+
+At 4 bits with one scale, most of the small numbers are rounded to zero or pushed to the same value. The cause is that single large number. The grid has to stretch far enough to reach it, so its points end up far apart, and everything small falls between them. One outlier costs all the others their precision.
+
+Now press "One scale per four". The first four numbers get a grid of their own, sized for them, and they come back almost exactly. The other four still share a grid with the outlier and still suffer.
+
+How many numbers share one scale is called **granularity**. Finer granularity means better accuracy, and more scales to store and apply.
+
+## Does it work on a real model?
+
+I wanted to see this on something real. So I took GPT-2, rounded every weight matrix in exactly this crude way, and ran the result through the NumPy model from [the from-scratch note](/notes/gpt-from-scratch). Then I measured its loss on a short piece of text. Loss is how surprised the model is by the real next token, so lower is better.
+
+I did it twice: once with a single scale for each whole matrix, and once with a separate scale for each column.
+
+<BarsFig
+  label="Loss of GPT-2 small after rounding its weights. Lower is better."
+  rows={[
+    { label: `32 bits, as released, ${count(quant.full.megabytes)} MB`, value: quant.full.loss, text: quant.full.loss.toFixed(2), tone: 'pen' },
+    ...shown.flatMap((row) => [
+      {
+        label: `${row.bits} bits, ${count(row.megabytes)} MB, one scale`,
+        value: row.one.loss,
+        text: row.one.loss.toFixed(2),
+        tone: broken(row.one.loss) ? 'warn' : undefined,
+      },
+      {
+        label: `${row.bits} bits, a scale per column`,
+        value: row.column.loss,
+        text: row.column.loss.toFixed(2),
+        tone: broken(row.column.loss) ? 'warn' : undefined,
+      },
+    ]),
+  ]}
+>
+
+**Real GPT-2 weights, rounded and re-run.** Red means the loss rose by more than 1, which is a broken model. The test is {quant.tokens} tokens of text, so treat the second decimal as noise.
+
+</BarsFig>
+
+A few things I did not expect.
+
+**Half the bits cost nothing, twice.** At 16 bits the loss is {at(16).one.loss.toFixed(2)}, the same as the original. At 8 bits with a scale per column it is {at(8).column.loss.toFixed(2)}. The model is a quarter of its original size and, by this measure, no worse.
+
+**Then it falls off a cliff.** With one scale per matrix, 8 bits gives {at(8).one.loss.toFixed(2)} and 6 bits gives {at(6).one.loss.toFixed(2)}. There is no gentle slope. One step too far and the model is gone.
+
+**Granularity moves the cliff.** With a scale per column, 6 bits is still {at(6).column.loss.toFixed(2)} and even 4 bits manages {at(4).column.loss.toFixed(2)}. Same number of bits, very different model. This is the eight-number figure again, at the size of a real network.
+
+**At 2 bits it knows nothing.** The loss is {at(2).one.loss.toFixed(2)}. A model that spread its guesses evenly over all 50,257 tokens would score 10.82. What is left has the shape of GPT-2 and none of what it learned.
+
+## The loss does not tell you everything
+
+There is one more result in that experiment, and it is the one I would remember.
+
+At 8 bits with a single scale, the loss barely moved: {quant.full.loss.toFixed(2)} to {at(8).one.loss.toFixed(2)}. By that number, the quantized model is fine.
+
+But I also asked it the question from the basics note: "The Eiffel Tower is located in the city of". The original says {quant.full.top.trim()}, narrowly ahead of Paris. The quantized one says {at(8).one.top.trim()}. And across the test text, its top guess matched the original's only {count(at(8).one.same * 100)}% of the time.
+
+An average can stay put while individual answers change underneath it. This is why the book insists on more than one check after quantizing:
+
+1. **Perplexity.** This is the loss in another form, e raised to its power. Quick to run, and as we just saw, not enough alone.
+2. **A public benchmark**, compared with the original model's score.
+3. **Your own evals**, from [chapter 2](/inference-engineering/know-your-workload). The only check that looks at your actual task.
+
+The standard it sets is strict: no difference you can tell apart from run-to-run noise.
+
+## What real systems do differently
+
+My experiment was deliberately crude, and it used a tiny model. Three things are done better in practice.
+
+**Floating-point formats instead of whole numbers.** My grid was evenly spaced, so a single large value stretched it for everyone. A floating-point format spends some of its bits on an exponent, which puts many grid points close to zero and still lets a few reach far out. The book's term for how far a format can stretch is **dynamic range**, and it is the reason production systems prefer 8-bit floats over 8-bit integers.
+
+**Finer granularity, built into the chip.** The newest GPUs support formats that keep one scale for every block of 32 values, or even 16. That is "one scale per four" from the figure, done in hardware.
+
+**Not quantizing everything.** Parts of a model differ in how much rounding they tolerate. The book ranks them from safest to riskiest:
+
+1. The weights of the big linear layers.
+2. The activations that flow between layers.
+3. The KV cache.
+4. The arithmetic inside attention, such as softmax.
+
+Attention is the riskiest because its errors compound. What a token computes is reused by every token after it, so a small error early on is carried through thousands of steps. Almost everyone leaves that arithmetic at full precision.
+
+Bigger models also forgive more. With hundreds of billions of weights, each one matters less. GPT-2 is small enough that I was probably looking at something close to the worst case.
+
+One last distinction. A lab can train a model to live at low precision from the start, which is called quantization-aware training. If you are working with weights someone else released, you can only round them afterwards. That is post-training quantization, and it is what I did here, minus the careful calibration a real tool would add.
+
+## Where this leaves us
+
+For most models, 8 bits is close to free and worth taking. Below that, it depends on the model, the format and how carefully it is done, and the only way to know is to test on your own task.
+
+It is also the one technique in the toolbox that can change a language model's answers. Speculation, caching and parallelism, which come next, leave the output exactly as it was.

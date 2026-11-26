@@ -1,0 +1,193 @@
+---
+// A schematic of what the model has to process for each new token, with and without the KV cache.
+import Figure from './Figure.astro';
+
+const prompt = ['The', ' cat', ' sat', ' on', ' the'];
+const written = [' mat', ' and', ' looked', ' at', ' me', '.'];
+---
+
+<Figure interactive>
+  <fig-kv data-prompt={JSON.stringify(prompt)} data-written={JSON.stringify(written)}>
+    <div class="fig-controls" role="group" aria-label="KV cache">
+      <button class="btn" type="button" data-cache="off" aria-pressed="true">Without a cache</button>
+      <button class="btn" type="button" data-cache="on" aria-pressed="false">With the KV cache</button>
+    </div>
+
+    <div class="sheet">
+      <p class="fig-label" data-doing aria-live="polite"></p>
+      <div class="toks row-of-tokens" data-tokens></div>
+      <ul class="key">
+        <li><span class="tok again">ab</span> worked out again</li>
+        <li><span class="tok saved">ab</span> read from the cache</li>
+        <li><span class="tok fresh">ab</span> worked out for the first time</li>
+      </ul>
+    </div>
+
+    <div class="sheet">
+      <p class="fig-label">Tokens pushed through the model so far</p>
+      <div class="bars" data-totals></div>
+    </div>
+
+    <div class="fig-controls">
+      <button class="btn primary" type="button" data-next>Write the next token</button>
+      <button class="btn" type="button" data-reset>Start over</button>
+    </div>
+  </fig-kv>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-kv {
+    display: block;
+  }
+
+  fig-kv > * + * {
+    margin-top: 1rem;
+  }
+
+  .row-of-tokens {
+    margin-top: 0.6rem;
+    min-height: 2rem;
+  }
+
+  fig-kv :global(.tok) {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+
+  fig-kv :global(.tok.again) {
+    background: var(--warn-wash);
+    box-shadow: inset 0 0 0 1px var(--warn);
+  }
+
+  fig-kv :global(.tok.saved) {
+    background: var(--mark-wash);
+    box-shadow: inset 0 0 0 1px var(--mark);
+  }
+
+  fig-kv :global(.tok.fresh) {
+    background: var(--pen-wash);
+    box-shadow: inset 0 0 0 1px var(--pen);
+  }
+
+  .key {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1.2rem;
+    margin: 0.9rem 0 0;
+    padding: 0.7rem 0 0;
+    border-top: 1px dashed var(--rule);
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+
+  .key li {
+    margin: 0;
+  }
+
+  .bars {
+    margin-top: 0.6rem;
+  }
+</style>
+
+<script>
+  import { h, tok } from '../../lib/fig';
+
+  class FigKv extends HTMLElement {
+    prompt: string[] = [];
+    written: string[] = [];
+    cache = false;
+    /** how many tokens have been written so far */
+    done = 0;
+
+    connectedCallback() {
+      this.prompt = JSON.parse(this.dataset.prompt ?? '[]');
+      this.written = JSON.parse(this.dataset.written ?? '[]');
+      this.querySelectorAll<HTMLButtonElement>('[data-cache]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.cache = button.dataset.cache === 'on';
+          this.draw();
+        }),
+      );
+      this.querySelector('[data-next]')!.addEventListener('click', () => {
+        if (this.done < this.written.length) this.done++;
+        this.draw();
+      });
+      this.querySelector('[data-reset]')!.addEventListener('click', () => {
+        this.done = 0;
+        this.draw();
+      });
+      this.draw();
+    }
+
+    /** tokens that go through the model to write token number n (1-based) */
+    work(n: number, cache: boolean) {
+      if (n === 1) return this.prompt.length;
+      return cache ? 1 : this.prompt.length + n - 1;
+    }
+
+    total(cache: boolean) {
+      let sum = 0;
+      for (let n = 1; n <= this.done; n++) sum += this.work(n, cache);
+      return sum;
+    }
+
+    draw() {
+      const { cache, done } = this;
+      this.querySelectorAll('[data-cache]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(((b as HTMLElement).dataset.cache === 'on') === cache)),
+      );
+
+      const sequence = [...this.prompt, ...this.written.slice(0, done)];
+      // what happened to each token while writing the most recent one
+      const state = (i: number) => {
+        if (done === 0) return '';
+        if (i === sequence.length - 1) return 'just';
+        if (done === 1) return 'fresh'; // the prompt, read for the first time
+        if (!cache) return 'again';
+        return i === sequence.length - 2 ? 'fresh' : 'saved';
+      };
+      this.querySelector('[data-tokens]')!.replaceChildren(
+        ...sequence.map((text, i) => {
+          const s = state(i);
+          const chip = tok(text, s === 'just' ? '' : s);
+          if (s === 'just') chip.style.fontWeight = '700';
+          return chip;
+        }),
+      );
+
+      const doing = this.querySelector('[data-doing]')!;
+      if (done === 0) doing.textContent = 'Five tokens of prompt. Nothing has been written yet.';
+      else {
+        const n = this.work(done, cache);
+        const word = this.written[done - 1].trim();
+        doing.textContent =
+          done === 1
+            ? `To write “${word}”, the model reads the whole prompt: ${n} tokens. Both versions do this once.`
+            : cache
+              ? `To write “${word}”, only the token before it goes through the model. The rest is looked up.`
+              : `To write “${word}”, all ${n} tokens before it go through the model again.`;
+      }
+
+      const without = this.total(false);
+      const withCache = this.total(true);
+      const most = Math.max(without, 1);
+      const bar = (label: string, value: number, on: boolean) =>
+        h(
+          'div',
+          { class: on ? 'bar-row wide is-pen' : 'bar-row wide' },
+          h('span', { class: 'name' }, label),
+          h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', vars: { '--p': (value / most).toFixed(4) } })),
+          h('span', { class: 'val' }, String(value)),
+        );
+      this.querySelector('[data-totals]')!.replaceChildren(
+        bar('Without a cache', without, !cache),
+        bar('With the KV cache', withCache, cache),
+      );
+      (this.querySelector('[data-next]') as HTMLButtonElement).disabled = done >= this.written.length;
+    }
+  }
+
+  customElements.define('fig-kv', FigKv);
+</script>

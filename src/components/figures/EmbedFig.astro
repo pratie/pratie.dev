@@ -103,7 +103,7 @@ const near = data.points.map((p: Point) => p.near);
     <div class="sheet readout" aria-live="polite">
       <p class="fig-label">
         Closest to <span data-word><Tok t={data.points[start].t} c={3} /></span> among all{' '}
-        {data.vocab.toLocaleString('en')} tokens, by cosine similarity in {data.dims} dimensions
+        {data.vocab.toLocaleString('en')} tokens. A score of 1.00 would mean identical.
       </p>
       <p class="toks" data-near-list>
         {

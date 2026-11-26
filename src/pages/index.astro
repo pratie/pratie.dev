@@ -1,7 +1,9 @@
 ---
 import Base from '../layouts/Base.astro';
+import Rail from '../components/Rail.astro';
 import NoteList from '../components/NoteList.astro';
-import { allNotes } from '../lib/notes';
+import SeriesList from '../components/SeriesList.astro';
+import { allNotes, standalone } from '../lib/notes';
 
 const notes = await allNotes();
 
@@ -19,6 +21,7 @@ const projects = [
 ---
 
 <Base>
+  <Rail slot="rail" />
   <section class="hello col">
     <h1>pratie</h1>
     <p class="lede">
@@ -29,7 +32,12 @@ const projects = [
 
   <section class="home-section row" aria-labelledby="notes-h">
     <h2 class="side" id="notes-h">Notes</h2>
-    <NoteList notes={notes} />
+    <NoteList notes={standalone(notes)} />
+  </section>
+
+  <section class="home-section row" aria-labelledby="series-h">
+    <h2 class="side" id="series-h">Series</h2>
+    <SeriesList notes={notes} />
   </section>
 
   <section class="home-section row" id="projects" aria-labelledby="projects-h">

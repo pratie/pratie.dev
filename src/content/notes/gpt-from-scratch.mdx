@@ -1,6 +1,7 @@
 ---
 title: A GPT from scratch, piece by piece
-description: Every layer between token ids and next-token probabilities, written in plain NumPy with numbers small enough to check by hand.
+short: A GPT from scratch
+description: The same model as the basics note, rebuilt from nothing in about forty lines of Python, with numbers small enough to check by hand.
 date: 2026-11-26
 order: 2
 prereqs:
@@ -18,9 +19,15 @@ import HeadsFig from '../../components/figures/HeadsFig.astro';
 import NormFig from '../../components/figures/NormFig.astro';
 import MlpFig from '../../components/figures/MlpFig.astro';
 
-These are my notes from working through Green Code's video [How to Build a GPT from Scratch](https://www.youtube.com/watch?v=3LWHYlmyqZ0), which builds a GPT's forward pass with nothing but NumPy. I rebuilt it as I watched. The code and the worked numbers below are my own, and at the end I load GPT-2's real weights into the code to check that it is right.
+The basics note describes what each part of a language model does. I wanted to know whether I understood it well enough to build one.
 
-"Forward pass" means the trip from token ids to probabilities and a loss. How the loss turns into better weights is backpropagation, and that is a note for another day.
+So I worked through Green Code's video [How to Build a GPT from Scratch](https://www.youtube.com/watch?v=3LWHYlmyqZ0), which builds a GPT using nothing but NumPy, and rebuilt it myself as I watched. NumPy is a Python library for doing arithmetic on whole grids of numbers at once. It knows nothing about neural networks, which is the point. Every piece has to be written out.
+
+The code and the worked numbers below are my own. At the end I load GPT-2's real weights into the code to check that it is right.
+
+Fair warning: this note has code and some maths in it. I have tried to make it readable if you skip both. Every idea has a figure you can play with, and the grey boxes of code can be passed over without losing the thread.
+
+One limit on what is covered. This is the **forward pass**: the trip from tokens to probabilities, plus a measure of how wrong they were. How a model uses that measure to improve its weights is called backpropagation, and that is a note for another day.
 
 ## The pieces
 
@@ -32,9 +39,15 @@ A GPT is a short list of parts, most of them used again and again.
 
 </ArchMap>
 
-Every box is one of three things: a table lookup, a matrix multiplication, or a small fixed formula. There is nothing else in there.
+That diagram looks intimidating. It helps to notice that every box in it is one of only three things:
 
-One piece of bookkeeping. I will call the number of tokens T and the length of each token's vector d. In GPT-2 small, d is 768. In my examples it is 4. The data moving down that thick line is always a matrix with T rows and d columns: one row per token.
+- **A table lookup.** Find a row in a table.
+- **A matrix multiplication.** A matrix is a grid of numbers. Multiplying a list of numbers by a matrix gives you a new list of numbers, and that single operation is most of what a neural network does.
+- **A small fixed formula**, a line or two long.
+
+There is nothing else in there.
+
+One piece of bookkeeping before starting. I will call the number of tokens T, and the length of each token's vector d. In GPT-2 small, d is 768. In my examples it is 4. Whatever is moving down that thick line is always a grid with T rows and d columns: one row of numbers per token.
 
 I will follow the order of the video: the two ends first, then the middle.
 
@@ -56,7 +69,11 @@ For the rest of this note I will use a toy sentence: "my cat sleeps all day". I 
 
 ## Softmax
 
-Now the other end. The last step of the model produces one score for every token in the vocabulary. The scores are called logits, and they can be any size, positive or negative. Softmax turns them into probabilities: positive numbers that add up to 1.
+Now the other end. The last step of the model produces one score for every token in the vocabulary. The scores are called logits, and they can be any size, positive or negative.
+
+But the generation loop needs probabilities, not scores. So here is the question. How do you turn any list of numbers into probabilities?
+
+They have to end up positive. They have to add up to 1. And a bigger score should get a bigger share. Softmax is the standard way to get all three.
 
 $$
 \text{softmax}(x)_i = \frac{e^{x_i}}{\sum_j e^{x_j}}
@@ -88,7 +105,9 @@ A real example of the gaps being all that matter: GPT-2's highest scores for the
 
 ## Cross-entropy loss
 
-Training needs a single number that says how wrong a prediction was. The model gave a probability to every token. We know which token really came next. The loss is
+Training needs a single number that says how wrong a prediction was. Why a single number? Because "make this number smaller" is something you can aim at, and "be less wrong in general" is not.
+
+The model gave a probability to every token. We know which token really came next. The loss is
 
 $$
 L = -\sum_i y_i \ln p_i
@@ -140,7 +159,9 @@ I will build it in three steps on the toy sentence. The figure does the arithmet
 
 ### Step 1: plain dot products
 
-Pick the token that is reading. Take the dot product of its vector with every token's vector: multiply the matching numbers and add them up. A dot product is large when two vectors point the same way, so it works as a similarity score. Softmax turns the row of scores into weights that add up to 1. The reader's new vector is the weighted average of everyone's vectors.
+Pick the token that is reading. Take the **dot product** of its vector with every token's vector. A dot product is simple: multiply the matching numbers and add everything up. For (1, 2) and (3, 4) that is 1×3 + 2×4 = 11.
+
+Why that operation? Because a dot product is large when two vectors point the same way and small when they do not. It works as a score for how alike two tokens are. Softmax turns the row of scores into weights that add up to 1. The reader's new vector is the weighted average of everyone's vectors.
 
 For all tokens at once, with $X$ as the matrix of T rows:
 
@@ -232,7 +253,7 @@ Once attention has moved information between tokens, every token's vector goes t
 
 The nonlinearity is not optional. Two matrix multiplications in a row are equivalent to one, so without something bent in between, stacking layers buys nothing. ReLU is the simplest bend there is: negative numbers become zero. The video uses ReLU, and so did the original transformer. GPT-2 uses GELU, a smooth curve of the same general shape, so that is what my code uses.
 
-Andrej Karpathy's way of describing the split has stuck with me: attention is where tokens **communicate**, and the MLP is where each token **computes** on what it gathered.
+Andrej Karpathy's way of describing the split is hard to beat: attention is where tokens **communicate**, and the MLP is where each token **computes** on what it gathered.
 
 <Snippet name="mlp" />
 

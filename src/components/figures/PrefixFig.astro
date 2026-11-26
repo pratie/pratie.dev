@@ -1,0 +1,87 @@
+---
+// Two requests that share a beginning. Only the shared beginning can be read from a cache.
+import Figure from './Figure.astro';
+
+const rules = ['You', ' are', ' a', ' support', ' agent', ' for', ' Acme', '.', ' Be', ' brief', '.'];
+const first = [' Where', ' is', ' my', ' order', '?'];
+const second = [' Can', ' I', ' get', ' a', ' refund', '?'];
+
+const layouts = [
+  {
+    title: 'The part that never changes goes first',
+    a: [...rules, ...first],
+    b: [...rules, ...second],
+  },
+  {
+    title: 'The part that changes goes first',
+    a: [...first.map((t, i) => (i === 0 ? t.trim() : t)), ' You', ...rules.slice(1)],
+    b: [...second.map((t, i) => (i === 0 ? t.trim() : t)), ' You', ...rules.slice(1)],
+  },
+].map((layout) => {
+  let shared = 0;
+  while (shared < layout.a.length && layout.a[shared] === layout.b[shared]) shared++;
+  return { ...layout, shared };
+});
+---
+
+<Figure>
+  {
+    layouts.map((layout) => (
+      <div class="sheet">
+        <p class="fig-label">{layout.title}</p>
+        {[layout.a, layout.b].map((tokens, r) => (
+          <p class="line">
+            <span class="who">request {r + 1}</span>
+            {tokens.map((t, i) => (
+              <span class:list={['tok', r === 1 && i < layout.shared ? 'hit' : 'miss']}>{t}</span>
+            ))}
+          </p>
+        ))}
+        <p class="fig-label count">
+          Request 2 reads <strong>{layout.shared}</strong> of its {layout.b.length} tokens from the cache and has to prefill
+          the other {layout.b.length - layout.shared}.
+        </p>
+      </div>
+    ))
+  }
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0;
+    margin: 0.6rem 0 0;
+  }
+
+  .who {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+
+  .tok {
+    border-radius: 0;
+    padding-inline: 0.15em;
+  }
+
+  .tok.miss {
+    background: transparent;
+  }
+
+  .tok.hit {
+    background: var(--mark-wash);
+  }
+
+  .count {
+    margin-top: 0.8rem;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--rule);
+  }
+
+  strong {
+    color: var(--ink);
+  }
+</style>

@@ -1,0 +1,181 @@
+---
+// A calculator: a few sliders and menus in, a few rows and one sentence out.
+// The arithmetic lives in src/lib/calcs.ts so it can be tested without a page.
+import Figure from './Figure.astro';
+import { calcs, count } from '../../lib/calcs';
+
+interface Input {
+  id: string;
+  label: string;
+  value: number;
+  /** a slider, when min and max are given */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** printed after the number: "ms", "%", " tokens" */
+  unit?: string;
+  /** a menu, when options are given; value is the index or number chosen */
+  options?: { label: string; value: number }[];
+}
+
+interface Props {
+  /** name of the function in calcs.ts */
+  calc: string;
+  inputs: Input[];
+}
+
+const { calc, inputs } = Astro.props;
+if (!calcs[calc]) throw new Error(`No calculator named "${calc}" in src/lib/calcs.ts`);
+
+const start = calcs[calc](Object.fromEntries(inputs.map((input) => [input.id, input.value])));
+const uid = crypto.randomUUID().slice(0, 8);
+const digits = (step = 1) => (step >= 1 ? 0 : step >= 0.1 ? 1 : 2);
+---
+
+<Figure interactive>
+  <fig-calc data-calc={calc}>
+    <div class="knobs">
+      {
+        inputs.map((input) =>
+          input.options ? (
+            <div class="slider pick">
+              <label for={`${uid}-${input.id}`}>{input.label}</label>
+              <select class="field-input" id={`${uid}-${input.id}`} data-in={input.id}>
+                {input.options.map((option) => (
+                  <option value={option.value} selected={option.value === input.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div class="slider">
+              <label for={`${uid}-${input.id}`}>{input.label}</label>
+              <input
+                type="range"
+                id={`${uid}-${input.id}`}
+                min={input.min}
+                max={input.max}
+                step={input.step ?? 1}
+                value={input.value}
+                data-in={input.id}
+                data-unit={input.unit ?? ''}
+                data-digits={digits(input.step)}
+              />
+              <output for={`${uid}-${input.id}`}>{count(input.value, digits(input.step)) + (input.unit ?? '')}</output>
+            </div>
+          ),
+        )
+      }
+    </div>
+
+    <div class="sheet">
+      <div class="bars" data-rows>
+        {
+          start.rows.map((row) => (
+            <div class:list={['bar-row', 'wide', row.tone && `is-${row.tone}`]}>
+              <span class="name">{row.label}</span>
+              {row.bar === undefined ? (
+                <span />
+              ) : (
+                <span class="bar-track">
+                  <span class="bar-fill" style={`--p:${row.bar.toFixed(4)}`} />
+                </span>
+              )}
+              <span class="val">{row.text}</span>
+            </div>
+          ))
+        }
+      </div>
+      <p class="answer" data-answer aria-live="polite">{start.answer}</p>
+    </div>
+  </fig-calc>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-calc {
+    display: block;
+  }
+
+  .knobs {
+    display: grid;
+    gap: 0.3rem;
+    margin-bottom: 1rem;
+  }
+
+  .slider {
+    grid-template-columns: minmax(6.5rem, 12rem) minmax(4rem, 1fr) minmax(4.25rem, auto);
+  }
+
+  .slider label {
+    line-height: 1.3;
+  }
+
+  .slider output {
+    white-space: nowrap;
+  }
+
+  .pick {
+    grid-template-columns: minmax(6.5rem, 12rem) 1fr;
+  }
+
+  .pick select {
+    min-height: 2.25rem;
+    padding-block: 0.3rem;
+  }
+
+  .answer {
+    margin: 0.9rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--rule);
+    min-height: 4.2em;
+    font-family: var(--font-text);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+</style>
+
+<script>
+  import { calcs, count, type Row } from '../../lib/calcs';
+  import { h } from '../../lib/fig';
+
+  class FigCalc extends HTMLElement {
+    connectedCallback() {
+      this.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-in]').forEach((input) => {
+        input.addEventListener('input', () => this.draw());
+        input.addEventListener('change', () => this.draw());
+      });
+      this.draw();
+    }
+
+    row(row: Row) {
+      return h(
+        'div',
+        { class: ['bar-row', 'wide', row.tone ? `is-${row.tone}` : ''].join(' ').trim() },
+        h('span', { class: 'name' }, row.label),
+        row.bar === undefined
+          ? h('span')
+          : h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', vars: { '--p': row.bar.toFixed(4) } })),
+        h('span', { class: 'val' }, row.text),
+      );
+    }
+
+    draw() {
+      const calc = calcs[this.dataset.calc ?? ''];
+      if (!calc) return;
+      const values: Record<string, number> = {};
+      this.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-in]').forEach((input) => {
+        const value = Number(input.value);
+        values[input.dataset.in!] = value;
+        const output = input.parentElement?.querySelector('output');
+        if (output) output.textContent = count(value, Number(input.dataset.digits ?? 0)) + (input.dataset.unit ?? '');
+      });
+      const result = calc(values);
+      this.querySelector('[data-rows]')!.replaceChildren(...result.rows.map((row) => this.row(row)));
+      this.querySelector('[data-answer]')!.textContent = result.answer;
+    }
+  }
+
+  customElements.define('fig-calc', FigCalc);
+</script>

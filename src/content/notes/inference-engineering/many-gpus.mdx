@@ -1,0 +1,138 @@
+---
+title: When one GPU is not enough
+short: More than one GPU
+description: Big models do not fit on a single GPU. Splitting one across several is easy to draw and hard to do well, because GPUs talk to each other far more slowly than they think.
+date: 2026-11-26
+series: inference-engineering
+chapter: 10
+book:
+  - where: Section 5.4, Model Parallelism (pp. 142–144)
+    what: Estimating how many GPUs a model needs, and the three ways of splitting it.
+  - where: Sections 5.4.1 to 5.4.3 (pp. 144–148)
+    what: Tensor parallelism, expert parallelism, and running across more than one node.
+  - where: Section 5.5, Disaggregation (pp. 148–151)
+    what: Separate prefill and decode workers, when it is worth doing, and how Dynamo manages it.
+---
+
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import Pipeline from '../../../components/figures/Pipeline.astro';
+import { GPUS } from '../../../lib/calcs';
+
+In [the calculator from chapter 5](/inference-engineering/gpus), a 70-billion-parameter model at full precision barely squeezed onto the biggest GPU. The largest open models have ten times as many parameters. They do not fit on anything.
+
+So the model has to be spread over several GPUs. The obvious way is to put the first half of the layers on one GPU and the second half on another.
+
+That works. It is also the worst of the options, and seeing why is the key to this whole chapter.
+
+## How many do you need?
+
+First, the count. The memory has to hold the weights and leave room for [the KV cache](/inference-engineering/kv-cache), which on a busy server often takes more space than the weights do.
+
+<CalcFig
+  calc="gpucount"
+  inputs={[
+    { id: 'params', label: 'Model size, billions of parameters', min: 1, max: 1000, value: 671 },
+    {
+      id: 'bits',
+      label: 'Bits per weight',
+      value: 8,
+      options: [
+        { label: '16 bits', value: 16 },
+        { label: '8 bits', value: 8 },
+        { label: '4 bits', value: 4 },
+      ],
+    },
+    { id: 'cache', label: 'Share of memory kept for the cache', min: 10, max: 80, step: 5, value: 50, unit: '%' },
+    { id: 'gpu', label: 'GPU', value: 3, options: GPUS.map((gpu, i) => ({ label: `${gpu.name}, ${gpu.vram} GB`, value: i })) },
+  ]}
+>
+
+**Counting GPUs.** The starting values are the book's example, a 671-billion-parameter model at 8 bits. GPUs are rented in ones, twos, fours and eights, so the answer rounds up.
+
+</CalcFig>
+
+A handy number falls out of this: at 8 bits, a billion parameters is about a gigabyte. The book's example is DeepSeek, at 671 billion. Four of the largest GPUs could just about hold those weights and would have nothing left to work with. In practice it takes a full node of eight.
+
+## The catch: talking is slow
+
+Remember the bars from chapter 5. Inside one GPU, data moves at thousands of gigabytes a second. Between two GPUs in the same node, about a quarter of that. Between two nodes, a small fraction again.
+
+So the moment a model is spread across GPUs, a new kind of waiting appears. Every time one GPU needs something that another one has, the whole computation slows to the speed of the wire between them.
+
+That gives one question to ask of any way of splitting a model. **How often do the GPUs have to talk to each other, and how much do they say each time?**
+
+## Three ways to cut a model
+
+**By layer.** This is the obvious idea from the top of the page. The first GPU holds the early layers and the second holds the late ones. A token goes through all of the first GPU, is handed across, and goes through all of the second.
+
+It is a relay race. Only one runner is moving at a time, and the other stands waiting for the baton. You get the memory of two GPUs and the speed of one. The book's name for this is pipeline parallelism, and its verdict is that you should not use it inside a node.
+
+**Inside every layer.** Cut each big weight matrix into slices and give each GPU one slice of every layer. Now all the GPUs work on the same token at the same moment, each doing its share of each multiplication.
+
+This is where the speed comes from. Writing is limited by how fast weights can be fetched, and now every GPU fetches only its own slice, all at once. The price is that after each layer the GPUs have to combine their partial results before the next layer can start. That is a lot of talking, so it only works where the wires are fast: inside one node. This is called **tensor parallelism**, and the book says to treat it as the default.
+
+**By expert.** This one only applies to Mixture of Experts models, from [chapter 4](/inference-engineering/prefill-and-decode), where a layer is split into many small experts and each token uses only a few. Put whole experts on each GPU. A token gets sent to whichever GPUs hold the experts it needs.
+
+The GPUs talk much less here, because nothing has to be combined after every layer. Each token does not get any faster. But many tokens can be in flight at once, on different GPUs, so the system as a whole gets through more. This is **expert parallelism**.
+
+| Cut | How much the GPUs talk | What you gain |
+| --- | --- | --- |
+| By layer | Little, one hand-off per pass | Memory only |
+| Inside every layer | A lot, after every layer | Speed for each user |
+| By expert | Some, to route tokens | Total throughput |
+
+Real deployments mix them. The book describes using the second cut for the attention parts of a model and the third for its expert layers.
+
+## More than eight
+
+A node is eight GPUs. If that is still not enough, the model has to cross between machines, over a wire that is many times slower than the one inside a node.
+
+Cutting inside every layer needs too much talking for that. So the book gives two options across nodes. Use the fast cut inside each node and the relay-race cut between them, so only one hand-off crosses the slow wire. Or, for expert models, cut by expert across all sixteen GPUs.
+
+You will see these written as codes. TP8PP2 means tensor parallelism across eight GPUs and pipeline parallelism across two nodes. EP16 means expert parallelism across sixteen.
+
+The book adds a warning I thought was sensible. Unless the model truly cannot fit in one node, a second node is usually better spent as a second copy of the whole model, serving different users.
+
+## Splitting the work instead of the model
+
+There is another kind of split, and it follows from everything since chapter 4.
+
+Reading a prompt is limited by calculating. Writing an answer is limited by fetching. On a quiet server the two coexist nicely, because they lean on different parts of the chip. On a busy one they get in each other's way. Someone pastes in a huge document, the GPU throws all its compute at reading it, and everyone else's stream of tokens stutters.
+
+So give the two jobs their own machines. This is called **disaggregation**.
+
+<Pipeline
+  label="A request under disaggregation"
+  steps={[
+    { label: 'the prompt', sub: 'arrives' },
+    { label: 'prefill worker', sub: 'reads it, builds the KV cache' },
+    { label: 'the KV cache', sub: 'sent across to the other machine' },
+    { label: 'decode worker', sub: 'writes the answer' },
+  ]}
+/>
+
+A prefill worker reads the prompt and builds the KV cache. The cache is sent across to a decode worker. The decode worker writes the rest.
+
+Now each side can be set up for its own bottleneck, and each can be scaled by itself. If prompts get longer, add prefill workers. If answers get longer, add decode workers. The book's shorthand for a setup is something like 5P3D: five prefill workers and three decode workers behind one model.
+
+Look at the middle box, though. [The KV cache is big](/inference-engineering/kv-cache), and it now has to travel between machines on every request. That transfer is the new cost. It is one reason fast wiring matters, and one more reason to shrink the cache with quantization.
+
+There is also a sensible shortcut. If a prompt is short, or its beginning is already cached, the decode worker simply reads it itself and skips the hand-off.
+
+### When is it worth it?
+
+The book gives three conditions, and says you want all of them:
+
+1. A lot of traffic, on the order of a hundred million to a billion tokens a day.
+2. A big model, a hundred billion parameters or more.
+3. Long prompts, so that reading is a large share of the work.
+
+Without the first two, the extra machines cost more than the gain. Without the third, there is not enough reading to be worth separating, and the GPUs are better used as more ordinary copies.
+
+Its example of a perfect fit is a coding assistant: many developers at once, each sending thousands of lines of code as context, to a very large model.
+
+## Where this leaves us
+
+Spreading a model across GPUs is governed by one fact, that the wires between GPUs are slower than the memory inside them. Cutting inside every layer gives speed and needs fast wires. Cutting by expert gives throughput and tolerates slow ones. Cutting by layer gives only room.
+
+And there is a pattern in this chapter that the book states as a principle. The more traffic you have, the more of these techniques become worth using. Most of them make no sense for a small service. They are what a large one earns.

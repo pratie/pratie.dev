@@ -1,0 +1,188 @@
+---
+title: The KV cache. Why redo work you have already done?
+short: The KV cache
+description: To write one more token, a model does not need to reprocess everything before it. Keeping that work is the most important optimisation in inference, and it is paid for in memory.
+date: 2026-11-26
+series: inference-engineering
+chapter: 9
+prereqs:
+  - note: gpt-from-scratch
+    why: Queries, keys and values, worked through with small numbers. This chapter leans on them.
+book:
+  - where: Section 2.2.3, Attention (pp. 52–53)
+    what: Where the KV cache comes from and why it turns attention from quadratic into linear.
+  - where: Section 5.3.1, Prefix Caching and KV Cache Re-Use (pp. 136–138)
+    what: Sharing the cache between requests, and why only a matching beginning counts.
+  - where: Sections 5.3.2 to 5.3.4 (pp. 139–141)
+    what: Where to store the cache, cache-aware routing, and handling very long contexts.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import KvFig from '../../../components/figures/KvFig.astro';
+import PrefixFig from '../../../components/figures/PrefixFig.astro';
+import kv from '../../../data/bench/kvcache.json';
+import { span, count, KV_MODELS } from '../../../lib/calcs';
+
+export const last = kv.totals[kv.totals.length - 1];
+export const firstStep = kv.steps[0];
+export const lastStep = kv.steps[kv.steps.length - 1];
+
+Something about the generation loop looked wasteful to me once I thought about it.
+
+By the time a model writes its 1,000th token, it has already been through the first 999. It went through them to write token 999. And to write token 998. And every time before that.
+
+Does it really process all of them again for each new token? Nothing about those earlier tokens has changed. So why not keep the results and reuse them?
+
+That is the KV cache. But to see what exactly is being kept, I need two words from attention first.
+
+## What a new token needs from the old ones
+
+Attention is where a token reads the tokens before it. [The from-scratch note](/notes/gpt-from-scratch#attention) builds it up slowly. The short version:
+
+- The token doing the reading produces a **query**. Think of it as a question.
+- Every token produces a **key**, which is what it can be found by, and a **value**, which is what it hands over when it is read.
+
+To write the next token, the model compares the newest token's query against the key of every earlier token, and blends their values according to how well each key matched.
+
+So the newest token needs two things from each earlier token: its key and its value.
+
+## The observation
+
+Here is the part that makes the cache possible.
+
+A model like GPT can only look backwards. That is the mask from the from-scratch note. So the key and the value of the fifth token depend only on the first five tokens. Whatever gets written afterwards, the sixth token, the six-hundredth, cannot reach back and change them.
+
+Once computed, they are fixed for good.
+
+So compute each token's key and value once, when the token first goes through the model, and store them. From then on, a new token only has to compute its own, and look the others up.
+
+One key and one value per token, for every layer of the model. Keys and values: the **KV cache**.
+
+<KvFig>
+
+**What goes through the model for each new token.** A sketch with a made-up sentence, to show the bookkeeping. Step through it both ways and watch the two totals drift apart.
+
+</KvFig>
+
+Without the cache, the cost of each token grows with everything written so far. Double the length of a text and the total work roughly quadruples. With the cache, each new token costs about the same as the one before.
+
+## How much does it save?
+
+I wrote the same text with GPT-2 on my laptop twice: once feeding only the newest token and reusing the cache, and once switching the cache off and feeding the whole text back in for every token.
+
+<BarsFig
+  label="Time for GPT-2 small to write n tokens on my laptop"
+  rows={kv.totals.flatMap((t) => [
+    { label: `${t.tokens} tokens, with the cache`, value: t.with_s, text: span(t.with_s), tone: 'pen' },
+    { label: `${t.tokens} tokens, without`, value: t.without_s, text: span(t.without_s) },
+  ])}
+>
+
+**Measured.** Both versions wrote exactly the same text. The cache changes how long it takes and nothing else. My laptop was busy with other things during this run, so compare the two bars in each pair and do not read much into the absolute times.
+
+</BarsFig>
+
+For {last.tokens} tokens: {span(last.with_s)} with the cache, {span(last.without_s)} without. That is {count(last.without_s / last.with_s)} times slower, and the gap is still widening.
+
+Looking at single tokens makes the reason plain.
+
+<BarsFig
+  label="Time to write one token, by its position in the text"
+  rows={kv.steps.flatMap((s) => [
+    { label: `Token ${s.step}, with the cache`, value: s.with_ms, text: span(s.with_ms / 1000), tone: 'pen' },
+    { label: `Token ${s.step}, without`, value: s.without_ms, text: span(s.without_ms / 1000) },
+  ])}
+>
+
+**The same runs, one token at a time.** Each value is the middle of five neighbouring tokens, to smooth out the laptop's hiccups.
+
+</BarsFig>
+
+Without the cache, token {lastStep.step} takes {count(lastStep.without_ms / firstStep.without_ms)} times as long as token {firstStep.step}. With it, the time hardly moves. It does creep up a little, because a new token still has to look at every stored key, and there are more of them each time.
+
+This is so effective that nobody runs without it. Every inference engine uses a KV cache by default. In fact, "prefill" from [chapter 4](/inference-engineering/prefill-and-decode) could just as well be called "filling the cache": reading the prompt means computing the keys and values for every token in it, ready for decode to use.
+
+## What it costs
+
+The saving is paid for in memory, and the amount surprised me.
+
+For every token, the model stores a key and a value at every layer. In GPT-2 small that is 2 × 12 layers × 768 numbers, about 18,000 numbers per token. In a large model it is closer to 160,000.
+
+<CalcFig
+  calc="kvsize"
+  inputs={[
+    { id: 'model', label: 'Model', value: 2, options: KV_MODELS.map((m, i) => ({ label: `${m.name} (${m.layers} layers)`, value: i })) },
+    { id: 'context', label: 'Tokens in the conversation', min: 1000, max: 128000, step: 1000, value: 32000 },
+    { id: 'requests', label: 'Conversations at once', min: 1, max: 64, value: 8 },
+    {
+      id: 'bits',
+      label: 'Bits per number',
+      value: 16,
+      options: [
+        { label: '16 bits', value: 16 },
+        { label: '8 bits', value: 8 },
+      ],
+    },
+  ]}
+>
+
+**The size of the cache.** The layer counts and widths are the real ones for these models. The two Llama models store narrower keys and values than you might expect, because several attention heads share each one.
+
+</CalcFig>
+
+Eight conversations of 32,000 tokens on a 70-billion-parameter model need about 84 GB for the cache alone. At 8 bits per weight, the model itself is 70 GB. The cache has become bigger than the model.
+
+That explains several things from earlier chapters at once. It is why [a GPU needs headroom](/inference-engineering/gpus) well beyond the size of the weights. It is why long conversations are hard to serve. And it is why [quantizing](/inference-engineering/quantization) the cache is tempting even though it is riskier than quantizing weights: halving it frees a lot of room.
+
+## Reusing it between requests
+
+So far the cache lives and dies with one request. The next idea is to keep it around.
+
+If two requests begin with exactly the same text, then the keys and values for that shared beginning are identical. The second request can skip reading it and start from the saved cache. This is called **prefix caching**.
+
+It comes up constantly:
+
+- A long system prompt that is sent with every request.
+- The same document, with a different question each time.
+- A codebase that is passed in again for every completion.
+- Any chat. [A model has no memory](/notes/how-llms-work#what-this-explains), so every turn resends the entire conversation, and all of it except the newest message has been read before.
+
+There is one strict rule, and it follows from the observation above. A token's key and value depend on everything before it. Change one early token and every token after it is different, as far as the model is concerned. So only a shared **beginning** can be reused, and it ends at the first token that differs.
+
+<PrefixFig>
+
+**The same two requests, laid out two ways.** Yellow is what the second request can take from the cache. A made-up example, with one word per token.
+
+</PrefixFig>
+
+This turns into very practical advice for writing prompts. Put the parts that never change at the top. Put whatever is different each time, the user's question, the date, their name, at the bottom. A timestamp on the first line of a system prompt quietly throws away the whole cache on every single request.
+
+It also explains a line on API price lists. "Cached input tokens" are cheaper because, for the provider, they really are almost free.
+
+## Where to keep it
+
+A cache that is this valuable and this large raises a storage question. GPU memory is the fastest place and the smallest. The book lists four levels, each slower and roomier than the one before:
+
+| Where | Roughly how fast | Roughly how big |
+| --- | --- | --- |
+| GPU memory | terabytes per second | tens to hundreds of GB |
+| Ordinary RAM beside the GPU | tens to hundreds of GB per second | hundreds of GB to terabytes |
+| A local SSD | 5 to 10 GB per second | terabytes |
+| Network storage | gigabytes per second | tens of terabytes |
+
+The idea is the same as any cache: keep what is used most where it is quickest to reach, and push the rest further out.
+
+It also changes how requests should be shared out between servers. If several copies of the model are running, a user's next message should go back to the copy that already holds their conversation. Sending it to whichever server is least busy means reading the whole conversation again from the start. This is called cache-aware routing, and it comes back in [chapter 12](/inference-engineering/autoscaling).
+
+## When the text gets very long
+
+At some length the cache itself becomes the problem. The book has a nice definition of "long context" here: it is whatever length makes the cache start causing trouble on your setup, often somewhere past 32,000 tokens.
+
+Two helpers are worth knowing by name. **PagedAttention** stores the cache in small fixed-size pages, so memory is not lost to awkward gaps. **Chunked prefill** reads a very long prompt in pieces, letting other users' tokens through in between, so one enormous request does not freeze everyone else.
+
+And when a single GPU cannot hold the weights and the cache together, the model has to be spread over more than one. That is the next chapter.
+
+## Where this leaves us
+
+Each token's key and value never change after they are computed, so they are computed once and kept. That turns writing from something that gets slower with every token into something that stays roughly flat. The price is memory, often more than the model itself. And because only a shared beginning can be reused, the order of your prompt decides how much you save.

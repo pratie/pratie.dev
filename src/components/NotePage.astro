@@ -1,0 +1,221 @@
+---
+// One note, wherever it is published: header, "read first", body, book references, onward links.
+import 'katex/dist/katex.min.css';
+import { getEntry, render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import Rail from './Rail.astro';
+import BookRef from './BookRef.astro';
+import { SERIES } from '../data/series';
+import { allNotes, fmtDate, inSeries, noteUrl, readingTime, type Note } from '../lib/notes';
+
+interface Props {
+  note: Note;
+}
+
+const { note } = Astro.props;
+const { data } = note;
+const { Content, headings } = await render(note);
+const toc = headings.filter((h) => h.depth === 2);
+
+const everything = await allNotes();
+const prereqs = await Promise.all(
+  data.prereqs.map(async (p) => ({ why: p.why, note: (await getEntry(p.note))! })),
+);
+const related = (await Promise.all(data.related.map((r) => getEntry(r)))).filter((n) => n !== undefined);
+const buildsOn = everything.filter((n) => n.data.prereqs.some((p) => p.note.id === note.id));
+
+const series = data.series ? SERIES[data.series] : undefined;
+const chapters = data.series ? inSeries(everything, data.series) : [];
+const at = chapters.findIndex((n) => n.id === note.id);
+const previous = at > 0 ? chapters[at - 1] : undefined;
+const next = at >= 0 && at < chapters.length - 1 ? chapters[at + 1] : undefined;
+---
+
+<Base title={data.title} description={data.description} article={{ date: data.date, updated: data.updated }}>
+  <Rail slot="rail" current={note.id} headings={toc} />
+  <article>
+    <header class="note-head">
+      <h1>{data.title}</h1>
+      <p class="standfirst">{data.description}</p>
+      <p class="meta">
+        {
+          series && (
+            <>
+              <a href={`/${data.series}`}>{series.title}</a> · {at + 1} of {chapters.length} ·{' '}
+            </>
+          )
+        }
+        <time datetime={data.date.toISOString()}>{fmtDate(data.date)}</time> · {readingTime(note.body)} min read
+        {data.updated && <> · updated {fmtDate(data.updated)}</>}
+      </p>
+    </header>
+
+    {
+      prereqs.length > 0 && (
+        <aside class="links-box row" aria-labelledby="read-first">
+          <h2 class="side" id="read-first">Read first</h2>
+          <ul>
+            {prereqs.map((p) => (
+              <li>
+                <a href={noteUrl(p.note.id)}>{p.note.data.title}</a> <span>{p.why}</span>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )
+    }
+
+    <div class="note-body">
+      {
+        toc.length > 1 && (
+          <details class="toc-fold">
+            <summary>Contents</summary>
+            <ol>
+              {toc.map((h) => (
+                <li>
+                  <a href={`#${h.slug}`}>{h.text}</a>
+                </li>
+              ))}
+            </ol>
+          </details>
+        )
+      }
+      <div class="prose">
+        <Content />
+      </div>
+    </div>
+
+    <footer class="note-foot">
+      {data.series && <BookRef series={data.series} refs={data.book} />}
+      {
+        (previous || next) && (
+          <nav class="pager" aria-label="Chapters">
+            {previous ? (
+              <a href={noteUrl(previous.id)} rel="prev">
+                <span>Previous</span>
+                {previous.data.title}
+              </a>
+            ) : (
+              <span />
+            )}
+            {next && (
+              <a class="onward" href={noteUrl(next.id)} rel="next">
+                <span>Next</span>
+                {next.data.title}
+              </a>
+            )}
+          </nav>
+        )
+      }
+      {
+        buildsOn.length > 0 && (
+          <section class="links-box row" aria-labelledby="builds-on">
+            <h2 class="side" id="builds-on">Goes deeper</h2>
+            <ul>
+              {buildsOn.map((n) => (
+                <li>
+                  <a href={noteUrl(n.id)}>{n.data.title}</a> <span>{n.data.description}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      }
+      {
+        related.length > 0 && (
+          <section class="links-box row" aria-labelledby="related">
+            <h2 class="side" id="related">Related</h2>
+            <ul>
+              {related.map((n) => (
+                <li>
+                  <a href={noteUrl(n.id)}>{n.data.title}</a> <span>{n.data.description}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      }
+      <p class="fix">
+        Spotted a mistake? <a href="https://github.com/pratie/pratie.dev/issues/new" rel="noopener">Open an issue</a> and
+        I will fix it.
+      </p>
+    </footer>
+  </article>
+</Base>
+
+<style>
+  .links-box.row {
+    margin-top: 0;
+  }
+
+  .note-head + .links-box.row {
+    margin-top: 2.25rem;
+  }
+
+  .meta a {
+    color: inherit;
+  }
+
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+
+  .pager a {
+    display: grid;
+    gap: 0.2rem;
+    align-content: start;
+    font-weight: 700;
+  }
+
+  .pager a span {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--ink-2);
+  }
+
+  .pager .onward {
+    text-align: right;
+  }
+
+  .fix {
+    margin: 0;
+    font-size: 0.9375rem;
+    color: var(--ink-2);
+  }
+</style>
+
+<script>
+  // Mark the section being read in the rail's list of sections.
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('.rail .sections a')];
+  const heads = links
+    .map((a) => document.getElementById(decodeURIComponent(a.hash.slice(1))))
+    .filter((el): el is HTMLElement => el !== null);
+
+  if (heads.length > 0) {
+    let queued = false;
+    const mark = () => {
+      queued = false;
+      let current = -1;
+      heads.forEach((head, i) => {
+        if (head.getBoundingClientRect().top <= 140) current = i;
+      });
+      links.forEach((a, i) => (i === current ? a.setAttribute('aria-current', 'true') : a.removeAttribute('aria-current')));
+    };
+    addEventListener(
+      'scroll',
+      () => {
+        if (!queued) {
+          queued = true;
+          requestAnimationFrame(mark);
+        }
+      },
+      { passive: true },
+    );
+    mark();
+  }
+</script>

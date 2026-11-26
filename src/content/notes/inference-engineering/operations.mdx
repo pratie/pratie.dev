@@ -1,0 +1,151 @@
+---
+title: Keeping it running. Capacity, failures, releases and cost
+short: Running it for real
+description: The last layer is the least glamorous and the one users notice most. Where the GPUs come from, what happens when they break, how to ship a change safely, and what a token really costs.
+date: 2026-11-26
+series: inference-engineering
+chapter: 13
+book:
+  - where: Section 7.3, Multi-Cloud Capacity Management (pp. 193–199)
+    what: Buying GPUs, treating several clouds as one pool, routing by geography, reliability, security and compliance.
+  - where: Section 7.4, Testing and Deployment (pp. 199–204)
+    what: Kinds of testing, canary releases, estimating cost on dedicated hardware, and what to monitor.
+  - where: Section 7.5, Client Code (pp. 204–207)
+    what: Latency added on the client side, asynchronous requests, and streaming protocols.
+---
+
+import CalcFig from '../../../components/figures/CalcFig.astro';
+
+Nothing in this chapter makes a single token faster.
+
+All of it decides whether the service is still there at three in the morning, and whether the bill at the end of the month makes sense. The book treats it as part of the job, on the same footing as kernels and caches.
+
+## Where do the GPUs come from?
+
+It is tempting to assume you just rent as many as you need. Getting GPUs turns out to be a problem in its own right, especially the newest ones.
+
+There are three kinds of seller. The big general clouds have GPUs alongside everything else, usually at a premium. Newer GPU-focused clouds do little else. And there are resale markets for spare capacity.
+
+And there are three ways to buy:
+
+- **Reserved.** You commit to a block of GPUs for months or years. Cheapest per hour, and you pay whether you use them or not.
+- **On demand.** You take one when you need it and give it back. Flexible and expensive.
+- **Spot.** Leftover capacity at a discount, which can be taken away from you with a few minutes' notice.
+
+A large service mixes all three: reserved GPUs for the traffic that is always there, and the other two for the peaks. That is the idea from [the last chapter](/inference-engineering/autoscaling) at the scale of a whole company.
+
+Often no single provider has enough of what you need in the place you need it. So the GPUs end up spread across several clouds and regions, which leads to the next problem.
+
+## Many clouds, one pool
+
+The simple way to use three clouds is as three separate islands. Each has its own cluster and its own autoscaler. The trouble is obvious as soon as you say it: one island runs out of room while another sits half empty, and nothing can move between them.
+
+The book's answer is a layer above the clusters that sees all of them as one pool and decides globally where each model should run. Each cluster still looks after its own traffic, and that part matters. If the global layer goes down, the clusters keep serving.
+
+Done properly, this buys four things: more capacity, protection when one provider has an outage, shorter distances to users, and the ability to keep data where the law says it must stay.
+
+On distance, the book has a rule of thumb I will remember. A request loses about five milliseconds for every time zone it crosses. New York to San Francisco is fifteen, one way. When the whole budget is a few hundred milliseconds, sending a user in Singapore to a server in California is a real cost.
+
+## Things break
+
+This is the section with the biggest surprise in it.
+
+GPUs have a reputation for failing often. The book quotes a figure from Meta's paper on training Llama 3: across 16,000 GPUs and 54 days, there were 419 unexpected interruptions, mostly hardware. That works out to about one failure for every 50,000 hours of GPU time.
+
+Fifty thousand hours sounds like a long time. It is not, once you multiply.
+
+<CalcFig
+  calc="failures"
+  inputs={[{ id: 'gpus', label: 'GPUs you are running', min: 8, max: 5000, step: 8, value: 8 }]}
+>
+
+**How often to expect a failure**, at the rate Meta reported. The rate comes from training runs, so treat it as a rough guide for inference.
+
+</CalcFig>
+
+A single node of eight GPUs runs for 70,000 GPU-hours in a year. So even the smallest serious deployment should expect more than one failure a year, and a few hundred GPUs will see one every week.
+
+The conclusion is that failure cannot be treated as an emergency. It has to be routine. Notice a sick GPU early, take its whole node out of service, because the book warns that when one GPU on a node fails its neighbours often follow, and move the work somewhere else without anyone noticing.
+
+For a whole region going down, there are two stances. In **active-active**, several regions serve traffic all the time, and if one disappears the others absorb its share. In **active-passive**, a spare region is kept ready but idle, and traffic switches to it when needed. The first is smoother. The second is cheaper.
+
+## Keeping it safe
+
+Security could fill its own series, so I will only pass on how the book frames it. There are three things to protect: your users' data, your model's weights if they are your own, and the machines themselves, because GPU time is worth stealing.
+
+Its simplest piece of advice is one I liked for being so plain. Do not store what you do not need. Prompts and answers that are never saved cannot leak.
+
+## Shipping a change without breaking things
+
+Every change to a serving system is a risk, whether it is a new model, a new engine version or a different setting. There are three ways to test one, in increasing order of realism: poke at it by hand, flood it with generated traffic, or copy real traffic onto it, the shadowing from [chapter 3](/inference-engineering/latency-and-throughput).
+
+Testing here has a cost that ordinary software testing does not. It needs GPUs. So does releasing.
+
+The classic safe release is called **blue-green**. You build a complete second copy of the service with the change in it, switch all traffic over at once, and keep the old copy around in case you need to go back. For a service on a hundred GPUs, that means finding a second hundred, which may not exist.
+
+The alternative is a **canary** release, named after the birds miners carried to detect gas. Start the new version small. Send it one percent of traffic. Watch. If it behaves, send it more, and keep going until it has everything. If it misbehaves, only a few users ever saw it.
+
+With autoscaling this costs very little extra. As traffic shifts, the old version shrinks while the new one grows.
+
+## What does a token cost you now?
+
+On an API, cost is simple: a price per million tokens, times the tokens you used.
+
+On your own GPUs there is no price per token. There is rent, and it is the same whether the GPUs are busy or idle. What a token costs you depends on how many of them you manage to produce.
+
+<CalcFig
+  calc="permillion"
+  inputs={[
+    { id: 'gpus', label: 'GPUs', min: 1, max: 64, value: 8 },
+    { id: 'rent', label: 'Rent per GPU per hour, in dollars', min: 0.5, max: 10, step: 0.5, value: 4 },
+    { id: 'speed', label: 'Tokens per second at full load', min: 500, max: 50000, step: 500, value: 12000 },
+    { id: 'busy', label: 'Share of the time it is busy', min: 5, max: 100, step: 5, value: 40, unit: '%' },
+  ]}
+>
+
+**The price of your own tokens.** Invented numbers. Move the last slider and watch the price change while the rent stays exactly the same.
+
+</CalcFig>
+
+This is why the book says cost on dedicated hardware depends on batch size, traffic pattern and the lengths of prompts and answers, all at once. Its practical advice is to stop trying to work out a per-token price. Add up what the API would have cost you over a week or more, add up what the GPUs cost over the same period, and compare the totals.
+
+And include the people. The engineers who build and run this are part of the price, and they are easy to leave off the spreadsheet.
+
+## Watching it
+
+You cannot fix what you cannot see. The book's list of what to measure is worth having in one place:
+
+- How many requests are coming in.
+- How long the prompts and the answers are.
+- How many requests succeed and how many fail.
+- Latency: first token, tokens per second and end to end, each at P50, P90 and P99.
+- How many replicas are running, and how many are still starting.
+- How busy the GPUs and their memory are.
+- How many requests are waiting in the queue.
+
+The value is in seeing them together. A jump in latency means one thing if the request count jumped with it, and something else entirely if the prompts suddenly got longer.
+
+## The other end of the wire
+
+One last place hides latency, and it is easy to miss because it is not on the server at all. It is the code that calls the server.
+
+Opening a new secure connection takes a few tens of milliseconds. On a 300-millisecond budget, that is a tenth of it gone before the model has seen anything. Reusing an open connection for the next request avoids paying again. The standard client libraries do this quietly. If you write your own client, it is on you.
+
+For work nobody is waiting on, an ordinary request is the wrong shape, because it will time out after a few minutes. An **asynchronous** request says "here is the job, call me back at this address when it is done", and can then take hours.
+
+And for live audio or video, a single request and response is not enough. Both sides need to keep talking over one open connection. The book names the two common choices: WebSockets, which carry anything, and gRPC, which insists on an agreed format.
+
+## What I would do first
+
+That is the whole book, and it is a lot. If I were starting a deployment tomorrow, this is the order I would take things in, based on everything above.
+
+1. Write down the numbers that matter: how long a user can wait, what a request can cost, how much traffic there is and when.
+2. Find the smallest model that passes my own evals.
+3. Stay on a pay-per-token API until traffic is steady enough to keep GPUs busy.
+4. When that changes, start with an inference engine on its default settings, and measure before touching anything.
+5. Use 8-bit weights, and check the evals again.
+6. Reorder prompts so that the unchanging part comes first.
+7. Get cold starts down, then let the autoscaler run lean.
+8. Add the heavier techniques only when the traffic is large enough to pay for them.
+
+The thing I will keep from all of this is how physical it is. Under every technique is the same pair of limits from chapter 4: how fast a chip can calculate, and how fast it can fetch. Batching, caching, quantizing, speculating, splitting and scaling are all ways of working around one of those two, for a particular product, at a price somebody is willing to pay.

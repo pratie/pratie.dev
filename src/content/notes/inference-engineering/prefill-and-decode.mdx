@@ -1,0 +1,179 @@
+---
+title: Where the time goes. Reading is fast, writing is slow
+short: Prefill and decode
+description: A model reads your whole prompt in one go and then writes its answer one token at a time. The two phases are slow for different reasons, and that explains most of what follows.
+date: 2026-11-26
+series: inference-engineering
+chapter: 4
+book:
+  - where: Section 2.2, LLM Inference Mechanics (pp. 46–55)
+    what: Prefill and decode, the chat template, sampling settings, architecture names, Mixture of Experts.
+  - where: Section 2.4, Calculating Inference Bottlenecks (pp. 61–67)
+    what: The ops-to-byte ratio, arithmetic intensity, the roofline chart, and a worked example for attention.
+  - where: Section 2.5, Optimizing Attention (pp. 67–69)
+    what: FlashAttention, PagedAttention, and attention variants that scale better than the standard one.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import phases from '../../../data/bench/phases.json';
+import membw from '../../../data/bench/membw.json';
+import batching from '../../../data/bench/batching.json';
+import ttft from '../../../data/bench/ttft.json';
+import { span, count, GPUS } from '../../../lib/calcs';
+
+export const mid = phases[1];
+export const best = batching.reduce((a, b) => (b.total_tps > a.total_tps ? b : a));
+
+Two things about model APIs look odd until you know what is underneath. The first word of an answer takes noticeably longer than the words after it. And output tokens cost several times more than input tokens.
+
+Both come from one fact. Reading and writing are different jobs for a model, and they are slow for different reasons.
+
+## Two phases
+
+A request goes through the model in two phases.
+
+**Prefill** is the model reading your prompt. Every token of the prompt goes through the model together, in a single pass.
+
+**Decode** is the model writing its answer. This is the loop from [the basics note](/notes/how-llms-work#the-loop): one pass through the model produces one token, the token is added to the end, and the model goes again.
+
+So a prompt of 256 tokens costs one pass. An answer of 256 tokens costs 256 passes. That should make writing much slower than reading, and I wanted to see how much.
+
+<BarsFig
+  label="GPT-2 small on my laptop: time to read n tokens of prompt, and to write n tokens of answer"
+  rows={phases.flatMap((p) => [
+    { label: `Read ${p.tokens} tokens`, value: p.read_s, text: span(p.read_s) },
+    { label: `Write ${p.tokens} tokens`, value: p.write_s, text: span(p.write_s), tone: 'pen' },
+  ])}
+>
+
+**Measured, not estimated.** A 2017 MacBook Pro with two CPU cores and no GPU. Every bar shares one scale.
+
+</BarsFig>
+
+Reading {mid.tokens} tokens took {span(mid.read_s)}. Writing {mid.tokens} tokens took {span(mid.write_s)}, about {count(mid.write_s / mid.read_s)} times longer. That is why output tokens are the expensive ones.
+
+But look closer, because something does not add up. Writing means 256 passes and reading means one, so I would have guessed writing to be 256 times slower. It is only {count(mid.write_s / mid.read_s)} times slower. The single pass that reads 256 tokens is much more work than a pass that writes one. So what makes a pass slow?
+
+## What does one pass cost?
+
+To push a token through the model, the machine has to multiply it by every weight. GPT-2 small has 124 million of them, about half a gigabyte. Every one of those numbers has to travel from memory to the processor, get used, and make room for the next.
+
+That gives a pass two costs:
+
+- **Fetching** the weights from memory.
+- **Calculating** with them.
+
+In prefill, the weights are fetched once and used on 256 tokens. Lots of calculating per fetch.
+
+In decode, the weights are fetched once and used on a single token. Then they are fetched again for the next token. Very little calculating per fetch.
+
+Every chip has a limit on each of these, and the two limits have names.
+
+**Compute** is how many arithmetic operations the chip can do per second. It is measured in FLOPS, floating-point operations per second.
+
+**Memory bandwidth** is how many bytes per second can be moved from memory to the processor.
+
+Picture a kitchen. Compute is how fast the cook can chop. Memory bandwidth is how fast ingredients can be carried in from the pantry. If the cook stands waiting for the next crate, the kitchen is limited by carrying. If crates pile up next to the board, it is limited by chopping.
+
+Prefill is the second kitchen. There is plenty to chop for every crate, so the cook is the limit. The book's term is **compute bound**.
+
+Decode is the first kitchen. A whole pantry is carried in to make one sandwich. The carrying is the limit. That is **memory bound**.
+
+There is a proper measure behind the picture, called **arithmetic intensity**: how many operations you do for each byte you fetch. Every chip has its own balance point. The book works this out for an H100 GPU, which can do about 295 operations in the time it takes to move one byte, and then counts the operations in a decode step of attention and gets about 62. Decode asks for far fewer operations per byte than the chip could supply, so the chip's compute sits partly idle, waiting for memory.
+
+## Can I see that on my own laptop?
+
+If decode is limited by fetching, I should be able to predict my laptop's writing speed from two numbers: how fast it can read memory, and how big the model is.
+
+I measured the first by adding up a very large array, which does almost no calculating and a lot of fetching. The second is the size of the weights.
+
+<BarsFig
+  label="A prediction for GPT-2 small on my laptop, and what happened"
+  rows={[
+    { label: 'Ceiling: memory speed ÷ model size', value: membw.ceiling_tps, text: `${membw.ceiling_tps} tokens/s` },
+    { label: 'Measured decode speed', value: membw.measured_tps, text: `${membw.measured_tps} tokens/s`, tone: 'pen' },
+  ]}
+>
+
+**The ceiling is {membw.read_gbs} GB/s of memory reading divided by {membw.weights_gb} GB of weights.** If every token needs all the weights fetched once, the model cannot write faster than that.
+
+</BarsFig>
+
+The ceiling comes out at {membw.ceiling_tps} tokens a second. The laptop writes {membw.measured_tps}. I did not expect them to land that close. It will not always be this neat, and a pass does other things besides fetching weights. But the idea survives a real test: this model writes about as fast as the machine can re-read it.
+
+The same sum works for datacenter hardware.
+
+<CalcFig
+  calc="ceiling"
+  inputs={[
+    { id: 'params', label: 'Model size, billions of parameters', min: 1, max: 400, value: 70 },
+    {
+      id: 'bits',
+      label: 'Bits per weight',
+      value: 16,
+      options: [
+        { label: '16 bits', value: 16 },
+        { label: '8 bits', value: 8 },
+        { label: '4 bits', value: 4 },
+      ],
+    },
+    { id: 'gpu', label: 'GPU', value: 2, options: GPUS.map((gpu, i) => ({ label: `${gpu.name}, ${gpu.vram} GB`, value: i })) },
+  ]}
+>
+
+**Will it fit, and how fast could one stream go?** Memory sizes and bandwidths are the ones in the book's tables. The speed is a ceiling for a single request. Real numbers are lower.
+
+</CalcFig>
+
+A 70-billion-parameter model at 16 bits per weight is 140 GB. It only just squeezes onto the H200, with almost nothing left over, and tops out near 34 tokens a second for one stream. Halve the bits and it fits easily and the ceiling doubles. That is a preview of [chapter 7](/inference-engineering/quantization).
+
+## Using the compute that sits idle
+
+If decode leaves compute idle, the obvious move is to give it more to do for each trip through the weights. Fetch the weights once, and use them for several people's tokens.
+
+That is batching. I ran the same decode step for one request, then two at once, then four, and so on.
+
+<BarsFig
+  label="Tokens per second while decoding, by how many requests share each pass"
+  rows={batching.flatMap((b) => [
+    { label: `${b.batch} at once, all together`, value: b.total_tps, text: `${b.total_tps} tok/s`, tone: 'pen' },
+    { label: `${b.batch} at once, each person`, value: b.each_tps, text: `${b.each_tps} tok/s` },
+  ])}
+>
+
+**Measured on the same laptop.** Blue is what the machine produces in total. Grey is what any one person receives.
+
+</BarsFig>
+
+With {best.batch} requests sharing each pass, the laptop produces {best.total_tps} tokens a second in total, {count(best.total_tps / batching[0].total_tps, 1)} times what it manages for one request alone. Nothing about the model changed. The extra tokens came from compute that had been waiting around.
+
+Two things to notice. Each person gets fewer tokens per second as the batch grows, because a pass with more in it takes longer. That is the latency for throughput trade from [chapter 2](/inference-engineering/know-your-workload), in numbers. And the last rows fall off a cliff. At some batch size the cook becomes the limit after all, and adding more work only makes everything slower. On a two-core laptop that happens early. On a GPU it happens much later, but it does happen.
+
+## What each phase decides
+
+This gives the two numbers that the next chapter is about.
+
+Prefill decides how long you wait for the **first** token. A longer prompt means more to read, so a longer wait. My laptop needed {span(ttft[0].ttft_ms / 1000)} to start answering a {ttft[0].prompt}-token prompt and {span(ttft[3].ttft_ms / 1000)} for a {count(ttft[3].prompt)}-token one.
+
+Decode decides how quickly the **rest** arrive.
+
+Decode also gets slower as the text gets longer. After the {ttft[0].prompt}-token prompt the laptop wrote {ttft[0].tps} tokens a second. After the {count(ttft[3].prompt)}-token one it wrote {ttft[3].tps}. Each new token has to look back at every earlier one, and there were more of them to look at. Attention is the one part of the model whose cost grows with the length of the text.
+
+That growth is where a lot of research goes. Three ideas from the book are worth knowing by name:
+
+- **FlashAttention** computes exactly the same attention, arranged so that intermediate results never leave the chip's fast on-board memory. Same answer, fewer trips to the pantry.
+- **PagedAttention** stores what attention needs to remember in small fixed-size blocks, so memory can be handed out and reclaimed without leaving unusable gaps.
+- Cheaper kinds of attention, such as only looking back a fixed distance, change the maths itself. These have to be built in when the model is trained.
+
+What attention needs to remember is called the KV cache, and it gets [a chapter of its own](/inference-engineering/kv-cache).
+
+## Two exceptions worth knowing
+
+Not every model reads all of its weights for every token. A **Mixture of Experts** model splits its big layers into many smaller "experts" and sends each token through only a few. The book's example is a Qwen model with 235 billion parameters of which 22 billion are used for any one token. For a single user that is a large saving. On a busy server, different requests wake different experts, so in practice nearly all the weights stay in use.
+
+And image and video models do not write token by token at all. They start from noise and refine the whole picture over a few dozen steps, with every step working on the entire image. That makes them compute bound, like prefill. They come back in [chapter 11](/inference-engineering/other-modalities).
+
+## Where this leaves us
+
+Reading is one heavy pass, limited by how fast the chip can calculate. Writing is many light passes, each limited by how fast the chip can fetch. Almost every technique later in this series is aimed at one of those two limits.

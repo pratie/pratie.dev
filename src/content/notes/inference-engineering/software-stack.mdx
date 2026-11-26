@@ -1,0 +1,191 @@
+---
+title: The software between your model and the GPU
+short: The software stack
+description: A file of weights cannot run itself. Between it and the chip sits a stack of software, and the same model on the same GPU can be several times faster depending on which layer of that stack you use.
+date: 2026-11-26
+series: inference-engineering
+chapter: 6
+book:
+  - where: Section 4.1, CUDA (pp. 96–101)
+    what: Kernels, the libraries they come from, choosing between them, and kernel fusion.
+  - where: Section 4.2, Deep Learning Frameworks and Libraries (pp. 101–105)
+    what: PyTorch and compilation, safetensors and ONNX, ONNX Runtime and TensorRT, Transformers and Diffusers.
+  - where: Sections 4.3 and 4.4 (pp. 105–112)
+    what: vLLM, SGLang and TensorRT-LLM compared, and NVIDIA Dynamo on top of them.
+  - where: Section 4.5.3, Profiling Performance (pp. 114–115)
+    what: What a profiler shows that a benchmark does not, and the tools for it.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import LayersFig from '../../../components/figures/LayersFig.astro';
+import fusion from '../../../data/bench/fusion.json';
+import profile from '../../../data/bench/profile.json';
+import { span, count } from '../../../lib/calcs';
+
+export const shareOf = (pattern) => profile.ops.filter((op) => pattern.test(op.op)).reduce((sum, op) => sum + op.share, 0);
+export const parts = [
+  { label: 'Linear layers inside the blocks', value: shareOf(/addmm/) },
+  { label: 'Final layer: a score for every token in the vocabulary', value: shareOf(/::mm$/) },
+  { label: 'Attention', value: shareOf(/attention/) },
+  { label: 'Activation function and small arithmetic', value: shareOf(/tanh|::mul$|::add$/) },
+];
+export const rest = 1 - parts.reduce((sum, part) => sum + part.value, 0);
+
+Here is something that looks strange at first. If I download an open model and run the sample code from its page, it works, and it is slow. The same model from a good provider, on the same kind of GPU, can be several times faster.
+
+Same weights. Same chip. So where does the difference come from?
+
+It comes from the software in between. There is a whole stack of it, and where you choose to work in that stack decides how much speed you get and how much effort it takes.
+
+## The stack
+
+<LayersFig
+  top="your request"
+  layers={[
+    {
+      name: 'Orchestration',
+      note: 'Coordinates many engines across many machines as one service.',
+      eg: 'NVIDIA Dynamo',
+    },
+    {
+      name: 'Inference engine',
+      note: 'A ready-made server for a model, with batching, caching and the other techniques built in and switched on by configuration.',
+      eg: 'vLLM, SGLang, TensorRT-LLM',
+    },
+    {
+      name: 'Framework',
+      note: 'Lets you describe a model in Python and takes care of running it on the hardware.',
+      eg: 'PyTorch',
+    },
+    {
+      name: 'Kernels',
+      note: 'Small pieces of code that each do one operation, such as multiplying two matrices, as fast as a particular chip allows.',
+      eg: 'cuBLAS, FlashAttention',
+    },
+    {
+      name: 'CUDA',
+      note: 'NVIDIA’s system for writing and running code on its GPUs.',
+    },
+  ]}
+  bottom="the GPU"
+>
+
+**From your request down to the chip.** Each layer hides the one below it. Most people work at the engine layer.
+
+</LayersFig>
+
+I will go through it from the bottom, because the upper layers only make sense once you know what they are hiding.
+
+## Kernels: the code that touches the chip
+
+The word "kernel" sounds deeper than it is. The book has a blunt translation that helps: when you read "CUDA kernel", read "a piece of code written for an NVIDIA GPU".
+
+A kernel does one job. Multiply these two matrices. Apply this function to every number in this array. Its whole purpose is to split that job across the GPU's thousands of workers and waste as little as possible.
+
+**CUDA** is the system NVIDIA provides for writing kernels and running them. It is not a programming language. Kernels are usually written in C++. But it is the foundation that everything else stands on, and it is a large part of why NVIDIA is so hard to compete with. A rival chip needs its own version of all of this.
+
+Almost nobody writes kernels from scratch. They come in libraries. The most heavily used one in inference is the kernel for general matrix multiplication, because that is what every linear layer in a model boils down to.
+
+What surprised me is how tied a kernel is to one specific chip. A good one is written around the exact amount of fast memory and the exact layout of a particular GPU. The book notes that FlashAttention for an H100 is different code from FlashAttention for a B200. This is why a brand new GPU does not reach its full speed on day one. The kernels have to catch up.
+
+## Same maths, different speed
+
+How can two pieces of code that compute the same thing differ so much in speed? [Chapter 4](/inference-engineering/prefill-and-decode) already gave the answer: fetching data from memory is the slow part.
+
+Suppose you need to do three things to a big array of numbers: multiply by something, add something, then replace the negatives with zero. That happens to be what a layer of a neural network does.
+
+The obvious way is three steps. Each one reads the whole array from memory, changes it, and writes a whole new array back.
+
+The other way is to do all three things to each number while it is on the chip, and write it back once. Combining operations like this is called **kernel fusion**.
+
+I tried both on my laptop, on an array of {fusion.megabytes} MB.
+
+<BarsFig
+  label="Three operations on a large array of numbers"
+  rows={[
+    { label: 'Three steps, a new array each time', value: fusion.written_ms, text: span(fusion.written_ms / 1000) },
+    { label: 'One trip through memory', value: fusion.fused_ms, text: span(fusion.fused_ms / 1000), tone: 'pen' },
+  ]}
+>
+
+**Measured on my laptop's CPU, in NumPy.** Both produce exactly the same numbers. This is a stand-in for what fusion does inside GPU code, not the real thing.
+
+</BarsFig>
+
+The second version is {count(fusion.written_ms / fusion.fused_ms, 1)} times faster, and not one multiplication was removed. The only thing that changed is how often the data crossed between memory and the chip.
+
+Simple cases like this can be fused automatically by a compiler. The complicated ones are fused by hand, by people who know one chip very well. FlashAttention is the famous example: the same attention arithmetic, rearranged so that intermediate results never leave the chip's fastest memory.
+
+## PyTorch: describing the model
+
+One layer up is the **framework**. In practice that means PyTorch.
+
+PyTorch lets you write a model as ordinary Python: this layer, then that function, then this layer. It works out which kernels to call and where the data needs to go.
+
+It also has a **compile** step. You point it at a specific GPU and it picks kernels and fuses what it can for that chip. The book mentions one limit: it cannot fuse the hand-written kernels that you plug in from outside, and for language models those are exactly the important ones.
+
+Two smaller things at this layer are worth knowing.
+
+**Model files.** Weights are usually shipped as *safetensors* files. The name is literal. Older formats could run arbitrary code when you opened them, and this one holds nothing but numbers. Another format, ONNX, stores the weights together with a description of the model's structure, which makes a file more portable between tools.
+
+**Reference code.** The `transformers` library from Hugging Face is what the sample code on a model's page uses. The book is clear about what it is for: a correct, readable implementation to learn from and adapt. It was never meant for serving at scale.
+
+That, by the way, is what I used for every measurement in this series. So my numbers are the slow version on purpose.
+
+## Where does a pass spend its time?
+
+Before going further up, I wanted to see inside one pass. A **benchmark** tells you how long something took. A **profiler** tells you where that time went.
+
+I profiled GPT-2 reading a {profile.tokens}-token prompt.
+
+<BarsFig
+  label={`Share of the time GPT-2 small spends reading a ${profile.tokens}-token prompt`}
+  rows={[
+    ...parts.map((part, i) => ({ label: part.label, value: part.value, text: `${count(part.value * 100)}%`, tone: i < 2 ? 'pen' : undefined })),
+    { label: 'Everything else', value: rest, text: `${count(rest * 100)}%` },
+  ]}
+  max={1}
+>
+
+**From PyTorch's own profiler, on my laptop.** The two blue rows are both matrix multiplication by a weight matrix.
+
+</BarsFig>
+
+Two things stood out.
+
+More than four fifths of the time is matrix multiplication. That is the whole reason one kernel, the matrix-multiply kernel, gets so much attention.
+
+And the second row is waste. The reference code works out a score for every token in the vocabulary at every position of the prompt. Only the scores at the last position are needed to pick the next token. A real engine skips the rest. I would not have guessed that a quarter of the time was going there, and that is the point of profiling. You find the thing you did not think to look for.
+
+## Engines: where most of the work happens now
+
+An **inference engine** is a complete server for a model. You give it weights and a configuration. It gives you an API, and inside it are the techniques from this series, already written and tested: batching, the KV cache, quantized weights, speculation, splitting across GPUs.
+
+This is the layer most inference engineers work at. The job becomes choosing an engine and tuning its settings, not writing kernels.
+
+The book compares three.
+
+| | vLLM | SGLang | TensorRT-LLM |
+| --- | --- | --- | --- |
+| Speed | Good | Good | Best |
+| Ease | Easy | Easy | Hard |
+| Models supported | Most | Most | Some |
+| Hardware | Many vendors | NVIDIA, AMD | NVIDIA only |
+
+**vLLM** is the most widely used. It supports the most models and the most kinds of hardware, and a new open model usually works in it on the day of release. It is the one to reach for when you want something running quickly.
+
+**SGLang** is the other community-built engine. It has put a lot of work into very large Mixture of Experts models spread over many machines, and it is built so that you can swap out individual parts.
+
+**TensorRT-LLM** is NVIDIA's. It is usually the fastest, partly because it has access to kernels written by NVIDIA's own engineers, and it takes the most effort to set up. The book's author says his team uses all three, and this one most.
+
+There is a principle running through that comparison which the book states outright and which I keep noticing everywhere in this subject. The more you constrain a system, the faster it can go. The engine that supports everything is rarely the fastest at any one thing.
+
+## Above the engine
+
+One layer remains. Once you have many engines on many machines, something has to coordinate them: send each request to the machine that already holds its cache, split reading and writing onto different machines, spread a model across more than one box.
+
+NVIDIA's **Dynamo** does this and sits on top of any of the three engines. The book is direct about when you need it. It is built for very large models and very heavy traffic. Below that scale it is extra complexity for little gain, and you should use an engine directly.
+
+## Where this leaves us
+
+The difference between slow sample code and a fast provider is this stack. Kernels decide how well each operation uses the chip. The framework chooses and combines them. The engine adds every technique in this series. And for most people, most of the time, the engine is the right place to work, with enough understanding of the layer underneath to know what its settings are doing.

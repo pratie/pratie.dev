@@ -1,0 +1,1 @@
+[{"prompt":16,"ttft_ms":80.5,"tps":27.0},{"prompt":64,"ttft_ms":178.0,"tps":25.2},{"prompt":256,"ttft_ms":651.3,"tps":21.2},{"prompt":1000,"ttft_ms":3173.5,"tps":12.0}]

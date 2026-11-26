@@ -1,0 +1,126 @@
+---
+title: What inference is, and why it gets its own engineers
+short: What inference is
+description: A model is trained once and then used millions of times. The using part is called inference, and making it fast, cheap and reliable turns out to be a whole job.
+date: 2026-11-26
+series: inference-engineering
+chapter: 1
+prereqs:
+  - note: how-llms-work
+    why: Tokens, attention and the generation loop. This series assumes you have met them.
+book:
+  - where: Preface (pp. 9–14)
+    what: Why open models turned inference from a niche into something most AI teams need.
+  - where: Chapter 0, Inference (pp. 17–22)
+    what: The three layers, the list of runtime techniques, and a map of the rest of the book.
+---
+
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import LayersFig from '../../../components/figures/LayersFig.astro';
+
+When I call a model through an API, it feels like nothing much is happening on the other side. I send some text and words start coming back. To build a product, that is all you need to know.
+
+Then the small questions start. Why does the first word take half a second while the rest arrive quickly? Why is the same model fast from one provider and slow from another? Why do output tokens cost more than input tokens? And if open models are free to download, why is running one yourself considered hard?
+
+All of these have the same answer, and it has a name: inference.
+
+## Two phases in a model's life
+
+A model lives in two phases.
+
+**Training** is where the model's numbers, its weights, get their values. It happens once per model, takes weeks, and uses thousands of GPUs.
+
+**Inference** is using those finished weights to answer a request. It happens every time someone presses Enter.
+
+In [the basics note](/notes/how-llms-work) I followed one sentence through GPT-2. Everything in that note was inference. The weights were already there and the model only had to use them.
+
+The thing to notice is the difference in scale between the two. Training is a large project with an end date. Inference is the thing that runs every second of every day for as long as the product exists. The book opens by arguing that this is where most of the value in AI now sits, and once you look at it this way the claim is not surprising. Every useful thing a model does for anyone is an inference call.
+
+## Why can't I just put the model on a GPU?
+
+This is the honest first question. The model is a file. A GPU can run the file. What else is there to do?
+
+So let's try it in our heads. One GPU, one model, writing 50 tokens a second. One person asks a question that needs a 300-token answer. That takes six seconds. Fine.
+
+Now forty people ask at the same moment.
+
+<CalcFig
+  calc="crowd"
+  inputs={[
+    { id: 'people', label: 'People asking at once', min: 1, max: 200, value: 40 },
+    { id: 'tokens', label: 'Length of an answer', min: 50, max: 1000, step: 50, value: 300, unit: ' tokens' },
+    { id: 'speed', label: 'Speed for one request', min: 10, max: 200, step: 5, value: 50, unit: ' tok/s' },
+    { id: 'together', label: 'Requests run together', min: 1, max: 32, value: 8 },
+    { id: 'kept', label: 'Speed each one keeps', min: 50, max: 100, step: 5, value: 70, unit: '%' },
+  ]}
+>
+
+**One GPU and a crowd.** These are round numbers I made up, so change them. Set "Requests run together" to 1 to see what happens when the GPU takes people one at a time.
+
+</CalcFig>
+
+Taken one at a time, the fortieth person waits four minutes. Nobody waits four minutes for a chatbot.
+
+You can do much better by running several requests through the model together, which is called batching. I get to why that works in [chapter 4](/inference-engineering/prefill-and-decode). For now, look at what it costs. Each individual answer gets slower, and the crowd as a whole is served far sooner. That is a trade: speed for one person against speed for everyone. Which side you favour depends on what you are building.
+
+And we have not even asked the next question. What if four hundred people turn up? No batch size saves a single GPU then. You need more GPUs, something to decide which request goes to which one, and something to start machines when traffic rises and stop them when it falls, because a GPU costs dollars an hour whether it is busy or idle.
+
+So "just put it on a GPU" breaks in three places. One request can be too slow. Many requests do not fit. And traffic never stays the same for long.
+
+## Three layers
+
+The book sorts all of this into three layers, and it is a useful way to hold the field in your head.
+
+<LayersFig
+  top="what you are building"
+  layers={[
+    {
+      name: 'Tooling',
+      note: 'How much of the machinery an engineer has to see. At one extreme you hand over weights and get back an API. At the other you get bare machines.',
+    },
+    {
+      name: 'Infrastructure',
+      note: 'Many machines acting as one service: adding and removing replicas, routing requests, surviving failures, finding enough GPUs.',
+      eg: 'chapters 12 and 13',
+    },
+    {
+      name: 'Runtime',
+      note: 'One model on one machine, made as fast and efficient as it can be.',
+      eg: 'chapters 4 to 11',
+    },
+  ]}
+  bottom="the GPUs"
+>
+
+**The three layers of an inference system**, as the book divides them.
+
+</LayersFig>
+
+Most of what sounds exotic lives in the runtime layer. Most of what keeps people awake at night lives in the infrastructure layer. A fast server that falls over under load is not a fast service.
+
+## The toolbox
+
+On the runtime side there is a short list of techniques that come up again and again. Here is each one in a line. Every one of them gets a chapter later.
+
+- **Batching.** Run several requests through the model together, so the GPU's spare capacity is not wasted.
+- **Caching.** The model repeats a lot of work from one token to the next, and from one request to the next. Save it and reuse it.
+- **Quantization.** Store the weights with fewer bits each. Smaller numbers are quicker to move and quicker to multiply.
+- **Speculation.** Let something cheap guess the next few tokens, and let the big model check all the guesses at once.
+- **Parallelism.** Spread one model across several GPUs when it does not fit on one, or when one is not fast enough.
+- **Disaggregation.** Reading the prompt and writing the answer stress a GPU in different ways, so give each its own machines.
+
+None of these changes what the model knows. They change how much time and money it takes to get the same answer out.
+
+## Why this is suddenly everyone's problem
+
+For a while it looked as if only a few labs would ever need any of this. They would train the models and serve them from behind an API, and the rest of us would rent intelligence one token at a time.
+
+What changed is that open models got good. You can download weights that are close to the best closed models and run them on hardware you control. The book's argument is that doing so gives you three things an API cannot: you decide how fast it is, how reliable it is, and what it costs.
+
+I think that argument is mostly right, with a caveat. The author works at Baseten, a company that sells exactly this, so he is not neutral on whether you should do it. He is also clear that most products should start on a pay-per-token API and move only when there is a reason. [Chapter 2](/inference-engineering/know-your-workload) is about telling when that is.
+
+## How these notes are laid out
+
+Chapters 2 and 3 are about knowing what you want before you optimise anything. Chapters 4 to 6 open up what is happening inside: the model, the hardware, and the software in between. Chapters 7 to 10 are the techniques from the toolbox. Chapter 11 looks at models that are not text. Chapters 12 and 13 are about running the whole thing for real.
+
+One note on the numbers. Wherever I could, I measured things on my own laptop instead of quoting someone else. It is a 2017 MacBook Pro with two CPU cores and no GPU worth mentioning, and it runs GPT-2 at about 25 tokens a second. A datacenter GPU is hundreds of times faster, so ignore my absolute numbers. The shapes carry over, and the shapes are what I am after.

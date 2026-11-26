@@ -1,0 +1,147 @@
+---
+title: Measuring speed. The first token, the rest, and the unlucky few
+short: Measuring speed
+description: One number cannot describe how fast a model feels. You need the wait for the first token, the pace of the rest, and an honest look at the slowest requests.
+date: 2026-11-26
+series: inference-engineering
+chapter: 3
+book:
+  - where: Section 1.4, Measuring Latency and Throughput (pp. 35–37)
+    what: TTFT, the different meanings of tokens per second, latency percentiles, end-to-end versus inference-only.
+  - where: Section 4.5, Performance Benchmarking and Load Testing (pp. 112–115)
+    what: Shadow traffic, what a realistic benchmark has to match, benchmarking tools, and profiling.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import ttft from '../../../data/bench/ttft.json';
+import batching from '../../../data/bench/batching.json';
+import load from '../../../data/bench/percentiles.json';
+import { span, count } from '../../../lib/calcs';
+
+export const best = batching.reduce((a, b) => (b.total_tps > a.total_tps ? b : a));
+export const middle = (xs) => xs[Math.floor(xs.length / 2)];
+
+"How fast is it?" sounds like a question with one answer.
+
+I tried to answer it for GPT-2 on my laptop and ended up with four different numbers. All of them were correct. Which one you want depends on who is asking.
+
+## What the person on the other end feels
+
+Start with the user. They press Enter and watch the screen. Two things shape how that feels.
+
+The first is how long they stare at nothing. That is **time to first token**, or TTFT. It covers everything before the first word appears.
+
+The second is how quickly the rest of the answer follows. That is **tokens per second**, or TPS.
+
+These two map directly onto the two phases you will meet in [the next chapter](/inference-engineering/prefill-and-decode). TTFT is mostly the model reading your prompt. TPS is the model writing its answer.
+
+<CalcFig
+  calc="latency"
+  inputs={[
+    { id: 'overhead', label: 'Network and queue', min: 0, max: 2000, step: 10, value: 80, unit: ' ms' },
+    { id: 'ttft', label: 'Time to first token', min: 20, max: 3000, step: 10, value: 400, unit: ' ms' },
+    { id: 'tps', label: 'Tokens per second', min: 5, max: 300, step: 5, value: 60 },
+    { id: 'tokens', label: 'Length of the answer', min: 10, max: 2000, step: 10, value: 300, unit: ' tokens' },
+  ]}
+>
+
+**What one request is made of.** Made-up numbers to play with. Shorten the answer to 20 tokens and see which part dominates. Then make it 2,000.
+
+</CalcFig>
+
+Which of the two matters more depends on the product.
+
+In a chat, the answer is read as it streams. People read at roughly 250 words a minute, which is five or six tokens a second. Any model writing faster than that is already ahead of the reader, so the first token is what makes a chat feel quick or slow.
+
+When an agent calls a tool, nobody reads anything. The output is useless until it is complete. There, neither number matters by itself, only the total.
+
+## "Tokens per second" means two different things
+
+This one is easy to be caught out by. In the next chapter I run several requests through GPT-2 at once. With {best.batch} sharing the model, my laptop produced {best.total_tps} tokens a second. Each of those {best.batch} people received {best.each_tps}.
+
+Both numbers are "tokens per second". One describes the machine, and one describes what a person gets. A provider can truthfully advertise the first while you experience the second.
+
+So when you read a TPS figure, ask which it is:
+
+- **Per user** is a latency number. It says how the answer feels.
+- **Total** is a throughput number. It says how much the hardware earns per hour.
+
+There is a third way of saying the per-user one: the gap between two tokens, called inter-token latency. A gap of 10 milliseconds is 100 tokens a second.
+
+## The first token depends on the prompt
+
+TTFT is not a property of the model alone. A longer prompt takes longer to read.
+
+<BarsFig
+  label="Time to first token for GPT-2 small on my laptop, by length of the prompt"
+  rows={ttft.map((t) => ({ label: `${count(t.prompt)}-token prompt`, value: t.ttft_ms, text: span(t.ttft_ms / 1000) }))}
+>
+
+**Measured on a 2017 MacBook Pro, CPU only.** A GPU would be hundreds of times faster. The shape is the same.
+
+</BarsFig>
+
+So a TTFT quoted without the prompt length is not much use. The same goes for any benchmark: if the test prompts are short and your real ones are long, the number will not survive contact with your product.
+
+## Averages hide the people having a bad time
+
+Here is an experiment that makes the point better than a definition would.
+
+I sent {load.requests} requests of mixed lengths through GPT-2 and timed each one. Then I let them arrive at random moments at a single worker that was busy about {count(load.busy * 100)}% of the time, and worked out how long each waited in line plus how long it took to compute.
+
+<BarsFig
+  label={`End-to-end time for ${load.requests} requests, one worker`}
+  rows={[
+    { label: 'Average', value: load.mean, text: span(load.mean / 1000) },
+    { label: 'P50: half are faster than this', value: load.p50, text: span(load.p50 / 1000), tone: 'pen' },
+    { label: 'P90: 1 in 10 is slower', value: load.p90, text: span(load.p90 / 1000) },
+    { label: 'P95: 1 in 20 is slower', value: load.p95, text: span(load.p95 / 1000) },
+    { label: 'P99: 1 in 100 is slower', value: load.p99, text: span(load.p99 / 1000), tone: 'warn' },
+  ]}
+>
+
+**Real compute times, replayed through one queue.** Each request's compute time was measured on my laptop. The arrival times are random, and the waiting follows from the two.
+
+</BarsFig>
+
+A typical request finished in {span(load.p50 / 1000)}. One in a hundred took {span(load.p99 / 1000)}, {count(load.p99 / load.p50)} times longer. The server was idle a third of the time, and still some people waited that long.
+
+This is what the **P** numbers are for. Sort every request from fastest to slowest. P50 is the one in the middle. P90 is the one that 90% of requests beat. P99 is the one that 99% beat.
+
+Notice that the average, {span(load.mean / 1000)}, describes nobody. It is well above the typical request and far below the bad ones. A handful of very slow requests drag it up.
+
+Why is the tail so long? Because slowness spreads. When one long request is being served, everyone who arrives behind it waits, even if their own request is tiny. One slow request makes several slow requests.
+
+And why care about one in a hundred? Because nobody makes only one request. If a conversation has twenty turns, the chance that at least one of them is slower than P95 is 64%. The slow tail is not a rare user's experience. It is most users' experience, some of the time.
+
+## Where you hold the stopwatch
+
+The last distinction is where the timing starts and stops.
+
+**Inference time** is measured on the server: from the moment the model starts on your request until it finishes.
+
+**End-to-end time** is measured from the user's side, and includes the network and any waiting in a queue.
+
+In my experiment the typical request needed {span(middle(load.compute_ms) / 1000)} of actual computing, and {span(load.p50 / 1000)} from start to finish. The rest was standing in line.
+
+The book puts it in a way I found useful. Inference time tells you whether your work on the model is paying off. End-to-end time tells you what users feel. When the first is good and the second is bad, stop tuning the model. The problem is in the infrastructure, which is [chapter 12](/inference-engineering/autoscaling).
+
+## Measuring honestly
+
+Every technique in this series ends with "then measure whether it helped". A measurement is only worth something if the test looks like real use. The book lists what has to match:
+
+- **Lengths.** Prompts and answers as long as your real ones.
+- **Traffic.** As many requests at once as you really get, arriving unevenly, the way people do.
+- **Content.** The actual text matters. Caching and speculation, which come later, behave very differently on code than on stories.
+- **Settings.** The same temperature and other options you will run with.
+
+The best test of all is to copy real traffic onto the system you are testing, which is called shadowing. Users are unaffected and the test is as realistic as a test can be.
+
+And the old rule for experiments applies. Change one thing, measure, then change the next.
+
+## Where this leaves us
+
+Time to first token, tokens per second per user, tokens per second in total, and the percentiles of all three, measured from the user's side. That is what "fast" breaks down into.
+
+Now I want to know where those numbers come from. Why is the first token slow and the rest quick?

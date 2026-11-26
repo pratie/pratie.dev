@@ -1,0 +1,89 @@
+---
+import Base from '../../layouts/Base.astro';
+import Rail from '../../components/Rail.astro';
+import { SERIES } from '../../data/series';
+import { allNotes, inSeries, noteUrl, readingTime } from '../../lib/notes';
+
+const series = SERIES['inference-engineering'];
+const chapters = inSeries(await allNotes(), 'inference-engineering');
+const minutes = chapters.reduce((sum, note) => sum + readingTime(note.body), 0);
+---
+
+<Base title={series.title} description={series.blurb}>
+  <Rail slot="rail" />
+  <section class="hello col">
+    <h1>{series.title}</h1>
+    <p class="lede">{series.blurb}</p>
+  </section>
+
+  <section class="home-section prose">
+    <p>
+      Calling a model through an API feels simple. You send text, text comes back. Somewhere behind that call,
+      someone had to work out which GPU to use, how to fit forty people onto it at once, what to do when four
+      hundred turn up, and how to keep the bill from eating the product. That work has a name now: inference
+      engineering.
+    </p>
+    <p>
+      I wanted to understand it properly, so I am reading
+      <a href={series.book!.url} rel="noopener"><cite>{series.book!.title}</cite></a> by {series.book!.author} and
+      writing each part down in my own words. Every chapter here starts from a question, builds the idea with a
+      small example, and only then gets into how it is done. Where I could, I measured things on my own laptop
+      instead of taking them on trust. Each chapter ends by pointing at the pages of the book that go deeper.
+    </p>
+    <p>
+      If you have not met tokens, attention or the generation loop before, read
+      <a href="/notes/how-llms-work">How an LLM works, end to end</a> first. Everything here builds on it.
+    </p>
+  </section>
+
+  <section class="home-section" aria-labelledby="chapters-h">
+    <h2 class="side" id="chapters-h">{chapters.length} chapters, about {Math.round(minutes / 5) * 5} minutes in all</h2>
+    <ol class="chapters">
+      {
+        chapters.map((note) => (
+          <li>
+            <span class="num">{note.data.chapter}</span>
+            <div>
+              <a href={noteUrl(note.id)}>{note.data.title}</a>
+              <p>{note.data.description}</p>
+            </div>
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+</Base>
+
+<style>
+  .chapters {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .chapters li {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 0 0.5rem;
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    line-height: 1.9;
+    color: var(--ink-2);
+  }
+
+  .chapters a {
+    font-weight: 700;
+  }
+
+  .chapters p {
+    margin: 0.25rem 0 0;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+</style>

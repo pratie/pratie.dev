@@ -1,21 +1,30 @@
 ---
 import Base from '../../layouts/Base.astro';
+import Rail from '../../components/Rail.astro';
 import NoteList from '../../components/NoteList.astro';
-import { allNotes } from '../../lib/notes';
+import SeriesList from '../../components/SeriesList.astro';
+import { allNotes, standalone } from '../../lib/notes';
 
 const notes = await allNotes();
 ---
 
 <Base title="Notes" description="Notes on how language models work, written to be understood rather than skimmed.">
+  <Rail slot="rail" />
   <section class="hello col">
     <h1>Notes</h1>
     <p class="lede">
-      How language models work, one piece at a time. They are in reading order, and each note says what to read
-      before it.
+      How language models work, one piece at a time. Start with the first one. Each note says what to read before
+      it, and the series picks up where the two basics notes leave off.
     </p>
   </section>
 
-  <section class="home-section">
-    <NoteList notes={notes} />
+  <section class="home-section row" aria-labelledby="basics-h">
+    <h2 class="side" id="basics-h">The basics</h2>
+    <NoteList notes={standalone(notes)} />
+  </section>
+
+  <section class="home-section row" aria-labelledby="series-h">
+    <h2 class="side" id="series-h">Series</h2>
+    <SeriesList notes={notes} />
   </section>
 </Base>

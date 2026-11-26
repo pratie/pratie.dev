@@ -1,0 +1,151 @@
+---
+// Quantize eight numbers by hand: pick how many bits, and whether neighbours share a scale.
+import Figure from './Figure.astro';
+
+const values = [0.12, -0.31, 0.05, 0.27, -0.08, 0.19, -0.22, 2.4];
+const uid = crypto.randomUUID().slice(0, 8);
+---
+
+<Figure interactive>
+  <fig-quant data-values={JSON.stringify(values)}>
+    <div class="slider">
+      <label for={`bits-${uid}`}>Bits per number</label>
+      <input id={`bits-${uid}`} type="range" min="2" max="8" step="1" value="4" data-bits />
+      <output for={`bits-${uid}`} data-bits-out>4</output>
+    </div>
+    <div class="fig-controls" role="group" aria-label="How many numbers share one scale">
+      <button class="btn" type="button" data-block="0" aria-pressed="true">One scale for all eight</button>
+      <button class="btn" type="button" data-block="4" aria-pressed="false">One scale per four</button>
+    </div>
+
+    <div class="sheet">
+      <div class="table">
+        <span class="head">original</span>
+        <div class="vec" data-row="original">{values.map(() => <span class="cell" />)}</div>
+        <span class="head">stored</span>
+        <div class="vec" data-row="stored">{values.map(() => <span class="cell" />)}</div>
+        <span class="head">read back</span>
+        <div class="vec" data-row="back">{values.map(() => <span class="cell" />)}</div>
+        <span class="head">error</span>
+        <div class="vec" data-row="error">{values.map(() => <span class="cell neg" />)}</div>
+      </div>
+      <p class="verdict" data-verdict aria-live="polite"></p>
+    </div>
+  </fig-quant>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-quant {
+    display: block;
+  }
+
+  fig-quant > * + * {
+    margin-top: 1rem;
+  }
+
+  .table {
+    display: grid;
+    grid-template-columns: 4.6rem 1fr;
+    gap: 0.35rem 0.5rem;
+    align-items: center;
+  }
+
+  .head {
+    color: var(--ink-2);
+    font-size: 0.75rem;
+  }
+
+  .vec {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .cell {
+    box-shadow: inset 0 0 0 1px var(--rule);
+    font-size: 0.8125rem;
+  }
+
+  .verdict {
+    margin: 0.9rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--rule);
+    min-height: 4.4em;
+    font-family: var(--font-text);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 34rem) {
+    .table {
+      grid-template-columns: 1fr;
+      gap: 0.2rem;
+    }
+
+    .vec {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 0.4rem;
+    }
+  }
+</style>
+
+<script>
+  import { num } from '../../lib/fig';
+  import { quantize, meanError } from '../../lib/quant';
+
+  class FigQuant extends HTMLElement {
+    values: number[] = [];
+    block = 0;
+
+    connectedCallback() {
+      this.values = JSON.parse(this.dataset.values ?? '[]');
+      this.querySelector('[data-bits]')!.addEventListener('input', () => this.draw());
+      this.querySelectorAll<HTMLButtonElement>('[data-block]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.block = Number(button.dataset.block);
+          this.draw();
+        }),
+      );
+      this.draw();
+    }
+
+    fill(row: string, texts: string[], heats: number[], negative: boolean[]) {
+      this.querySelectorAll<HTMLElement>(`[data-row="${row}"] .cell`).forEach((cell, i) => {
+        cell.textContent = texts[i];
+        cell.style.setProperty('--heat', String(Math.min(1, heats[i])));
+        if (row !== 'error') cell.classList.toggle('neg', negative[i]);
+      });
+    }
+
+    draw() {
+      const bits = Number(this.querySelector<HTMLInputElement>('[data-bits]')!.value);
+      this.querySelector('[data-bits-out]')!.textContent = String(bits);
+      this.querySelectorAll('[data-block]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(Number((b as HTMLElement).dataset.block) === this.block)),
+      );
+
+      const { values } = this;
+      const q = quantize(values, bits, this.block);
+      const peak = Math.max(...values.map(Math.abs));
+      const errors = values.map((v, i) => Math.abs(v - q.back[i]));
+      const levels = 2 ** (bits - 1) - 1;
+      const neg = (xs: number[]) => xs.map((x) => x < 0);
+
+      this.fill('original', values.map((v) => num(v, 2)), values.map((v) => Math.abs(v) / peak), neg(values));
+      this.fill('stored', q.stored.map((s) => num(s, 0)), q.stored.map((s) => Math.abs(s) / levels), neg(q.stored));
+      this.fill('back', q.back.map((v) => num(v, 2)), q.back.map((v) => Math.abs(v) / peak), neg(q.back));
+      this.fill('error', errors.map((e) => num(e, 2)), errors.map((e) => e / 0.3), []);
+
+      const lost = values.filter((v, i) => v !== 0 && q.stored[i] === 0).length;
+      const steps = [...new Set(q.step.map((s) => num(s, 3)))];
+      this.querySelector('[data-verdict]')!.textContent =
+        `${bits} bits can store whole numbers from −${levels} to ${levels}. ` +
+        (steps.length === 1 ? `One step is worth ${steps[0]}. ` : `One step is worth ${steps[0]} in the first four and ${steps[1]} in the last four. `) +
+        (lost > 0 ? `${lost} of the eight numbers ${lost === 1 ? 'is' : 'are'} rounded away to zero. ` : 'Nothing is rounded away to zero. ') +
+        `Average error: ${num(meanError(values, q.back), 3)}.`;
+    }
+  }
+
+  customElements.define('fig-quant', FigQuant);
+</script>

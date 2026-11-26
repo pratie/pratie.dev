@@ -1,0 +1,51 @@
+---
+// Measurements as labelled bars. All bars in one figure share a scale, so lengths can be compared.
+import Figure from './Figure.astro';
+
+interface Row {
+  label: string;
+  /** the number the bar is drawn from */
+  value: number;
+  /** what to print next to it, with its unit */
+  text: string;
+  tone?: 'pen' | 'warn';
+}
+
+interface Props {
+  rows: Row[];
+  /** value at which a bar is full; defaults to the largest value */
+  max?: number;
+  /** a line above the bars saying what they measure */
+  label?: string;
+  wide?: boolean;
+}
+
+const { rows, label, wide = false } = Astro.props;
+const max = Astro.props.max ?? Math.max(...rows.map((row) => row.value));
+---
+
+<Figure wide={wide}>
+  <div class="sheet">
+    {label && <p class="fig-label head">{label}</p>}
+    <div class="bars">
+      {
+        rows.map((row) => (
+          <div class:list={['bar-row', 'wide', row.tone && `is-${row.tone}`]}>
+            <span class="name">{row.label}</span>
+            <span class="bar-track">
+              <span class="bar-fill" style={`--p:${Math.min(1, row.value / max).toFixed(4)}`} />
+            </span>
+            <span class="val">{row.text}</span>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  .head {
+    margin-bottom: 0.75rem;
+  }
+</style>

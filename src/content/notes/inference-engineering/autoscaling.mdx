@@ -1,0 +1,137 @@
+---
+title: From one fast server to a service
+short: Scaling up and down
+description: One fast server is not a service. Traffic rises and falls, a new machine takes minutes to become useful, and something has to decide how many to keep running.
+date: 2026-11-26
+series: inference-engineering
+chapter: 12
+book:
+  - where: Section 7.1, Containerization (pp. 179–183)
+    what: Images, layers, pinning dependencies, and NVIDIA's ready-made containers.
+  - where: Section 7.2 and 7.2.1 (pp. 183–188)
+    what: What an autoscaler decides on, its five settings, and static, dynamic and continuous batching.
+  - where: Sections 7.2.2 to 7.2.5 (pp. 188–193)
+    what: Cold starts, routing and queues, scaling to zero, and scaling the parts of a pipeline separately.
+---
+
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import ScaleFig from '../../../components/figures/ScaleFig.astro';
+
+Eleven chapters in, I have one server running one model about as fast as it can go.
+
+Then traffic doubles. Nothing from the last eleven chapters helps with that. The book says it sharply: this is not a GPU problem or a PyTorch problem. It is a systems problem, and it needs different tools.
+
+## First, put it in a box
+
+Before you can run ten copies of a server, you have to be able to make one copy reliably.
+
+That is harder than it sounds. [The software stack](/inference-engineering/software-stack) is a tall tower of exact versions: this CUDA, that PyTorch, this build of the engine, these system libraries. The book describes these chains as long and fragile, and anyone who has tried to get a new model running will agree.
+
+A **container** freezes the whole tower into a single file, called an image. Start that image on any suitable machine and you get the same environment every time.
+
+Two habits the book recommends, both learned the hard way by somebody:
+
+- **Pin every version exactly.** New models often need pre-release builds of half the stack. If versions are allowed to drift, a build that worked on Monday fails on Thursday.
+- **Keep the image small.** It has to be copied onto every new machine before that machine can do anything, so every unneeded gigabyte is paid for again each time you scale up.
+
+## How many copies?
+
+Each running copy of the server is called a **replica**. The question is how many to run.
+
+Too few, and people wait. Too many, and you pay for GPUs that sit idle. Since traffic changes through the day, no fixed number is right. **Autoscaling** means changing the number as you go.
+
+What should the decision be based on? There are two signals:
+
+- **Utilisation:** how busy the GPUs are.
+- **Traffic:** how many requests are in the system.
+
+They do not always agree. A few requests with enormous prompts can max out a GPU while the request count looks calm. And utilisation only shows a problem once it is already happening, while traffic can be acted on as it arrives. The book suggests using both.
+
+The settings themselves are few:
+
+- The **fewest** replicas you will ever run.
+- The **most** you will allow.
+- How long a **window** of traffic you look at before deciding.
+- How long to **wait before scaling down**, in case the traffic comes back.
+- How many requests **one replica** should handle at once.
+
+That last one deserves a closer look.
+
+## How many requests can share a replica?
+
+[Chapter 4](/inference-engineering/prefill-and-decode) showed that running requests together gets far more out of a GPU, at some cost to each person's speed. There are three ways to organise that sharing, and a bus is a good way to picture them.
+
+**Static batching** is a bus that leaves only when every seat is taken. Efficient, and miserable for whoever got on first.
+
+**Dynamic batching** is a bus that leaves when it is full or when ten minutes have passed, whichever comes first. Nobody waits forever.
+
+**Continuous batching** is not a bus at all. It is a moving walkway. People step on whenever they arrive and step off when they are done, and it never stops. For a model, that means requests join and leave the batch between one token and the next.
+
+Every modern engine does the third. The setting that remains is how crowded you let the walkway get, and that is the trade between throughput and each person's speed again. The autoscaler's "requests per replica" should match it. When every replica is full, it is time to add one.
+
+## The number that decides everything
+
+Here is the catch with adding a replica. It is not instant. The delay is called a **cold start**, and it has four parts.
+
+<CalcFig
+  calc="coldstart"
+  inputs={[
+    { id: 'machine', label: 'Getting a machine', min: 0, max: 600, step: 10, value: 60, unit: ' s' },
+    { id: 'image', label: 'Size of the image', min: 1, max: 60, value: 12, unit: ' GB' },
+    { id: 'weights', label: 'Size of the weights', min: 1, max: 700, value: 140, unit: ' GB' },
+    { id: 'speed', label: 'Download speed', min: 50, max: 5000, step: 50, value: 1000, unit: ' MB/s' },
+    { id: 'engine', label: 'Starting the engine', min: 0, max: 600, step: 5, value: 45, unit: ' s' },
+  ]}
+>
+
+**What a cold start is made of.** Invented but plausible numbers. Drop the download speed to 100 MB/s, about what you might get pulling weights from across the internet.
+
+</CalcFig>
+
+Loading the weights usually dominates, because modern models are hundreds of gigabytes. The book's advice follows directly:
+
+- Keep a copy of the weights **in the same datacenter** as the GPUs, so they load at gigabytes a second instead of crawling in over the internet.
+- **Quantized weights** are smaller, so they load faster. A side benefit I had not thought of.
+- Some engines spend minutes compiling for the exact GPU when they start. **Save the compiled result** and reuse it.
+
+Why does this matter so much? Try it.
+
+<ScaleFig>
+
+**A traffic spike meets an autoscaler.** A simple simulation, not a measurement. Traffic jumps to five times its level for a few minutes. Each column is ten seconds. Darker means more.
+
+</ScaleFig>
+
+Start by moving only the cold start slider. With a short cold start, the spike barely registers. With a long one, requests pile up for minutes.
+
+Now put the cold start back up to a few minutes and raise "Always running" instead. The queue disappears, and you are paying for replicas that do nothing most of the time.
+
+That is the real relationship. Slow cold starts force you to keep spare capacity running, just in case. Fast cold starts let you run lean and trust that help will arrive in time. The book puts it this way: if you cannot start replicas quickly, you cannot scale down with confidence.
+
+## When there is more traffic than room
+
+Sometimes requests arrive faster than anything can serve them, at least for a while. They need somewhere to wait, and that is a **queue**. A simple one is first come, first served. A fancier one lets paying users go ahead of free ones.
+
+And when there are several replicas, something has to choose where each request goes. Splitting them evenly sounds fair and is not very smart. A request with a 10,000-token prompt is not the same load as one with 100. And some replicas are better choices than others. The one that already holds a user's [KV cache](/inference-engineering/kv-cache) can answer their next message far sooner than one that has to read the conversation from the top.
+
+## Scaling to nothing
+
+If traffic can drop to zero, why not run zero replicas and start one when a request arrives?
+
+You can. It is called scale to zero, and it needs a fast cold start and a queue that will hold the first request while the replica wakes up.
+
+The book is careful about when to use it. It suits development, and jobs that run on a schedule. For a live product with occasional traffic it means the first user after a quiet spell waits through an entire cold start. Its judgement on that case is blunt: if you are leaning on scale to zero to afford your own GPUs, you are probably not ready for them, and should be on a pay-per-token API.
+
+## When a request needs several models
+
+Many products chain models together. A voice agent listens, thinks and speaks, and those are three models with very different appetites. The small one that detects speech needs a sliver of a GPU. The language model might need several.
+
+So each part should be scaled independently. Otherwise the smallest part is over-provisioned or the largest becomes a bottleneck.
+
+But keep them close. The book gives an example with numbers I found persuasive. Say a message between two machines takes 10 milliseconds inside one cluster and 50 between clusters. Over a five-step pipeline, that difference adds up to 200 milliseconds, a fifth of a one-second budget, spent on nothing but distance.
+
+## Where this leaves us
+
+Running a service is a balance between people waiting and GPUs idling, and the cold start time sets how fine that balance can be. Package the server so it starts the same way everywhere. Let requests share replicas continuously. Make new replicas arrive fast. And when they cannot arrive fast enough, have a queue.
+
+All of that assumes the GPUs exist and keep working. The last chapter is about what happens when they do not.

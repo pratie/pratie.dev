@@ -1,0 +1,19 @@
+---
+import NotePage from '../../components/NotePage.astro';
+import { allNotes, inSeries, type Note } from '../../lib/notes';
+
+export async function getStaticPaths() {
+  return inSeries(await allNotes(), 'inference-engineering').map((note) => ({
+    params: { slug: note.id.split('/')[1] },
+    props: { note },
+  }));
+}
+
+interface Props {
+  note: Note;
+}
+
+const { note } = Astro.props;
+---
+
+<NotePage note={note} />

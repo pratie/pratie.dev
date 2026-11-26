@@ -1,0 +1,243 @@
+---
+// Speculative decoding replayed from a real run: DistilGPT-2 drafts four tokens, GPT-2 checks them in one pass.
+import Figure from './Figure.astro';
+import data from '../../data/bench/spec.json';
+
+const names = ['A fact', 'A story', 'Some code', 'A list'];
+const runs = data.runs.map((run, i) => ({ name: names[i] ?? `Prompt ${i + 1}`, prompt: run.prompt, rounds: run.rounds }));
+---
+
+<Figure interactive>
+  <fig-spec data-runs={JSON.stringify(runs)}>
+    <div class="fig-controls" role="group" aria-label="What is being written">
+      {
+        runs.map((run, i) => (
+          <button class="btn" type="button" data-run={i} aria-pressed={i === 0 ? 'true' : 'false'}>
+            {run.name}
+          </button>
+        ))
+      }
+    </div>
+
+    <p class="sheet text" data-text>{runs[0].prompt}</p>
+
+    <div class="sheet">
+      <p class="fig-label">The small model's draft</p>
+      <div class="toks slot" data-draft></div>
+      <p class="fig-label gap">The big model's verdict</p>
+      <p class="verdict" data-verdict aria-live="polite">Press the button to draft the first four tokens.</p>
+    </div>
+
+    <div class="sheet">
+      <div class="bars" data-score></div>
+    </div>
+
+    <div class="fig-controls">
+      <button class="btn primary" type="button" data-next>Next round</button>
+      <button class="btn" type="button" data-play>Play</button>
+      <button class="btn" type="button" data-reset>Start over</button>
+    </div>
+  </fig-spec>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-spec {
+    display: block;
+  }
+
+  fig-spec > * + * {
+    margin-top: 1rem;
+  }
+
+  .text {
+    margin-bottom: 0;
+    min-height: 7.4em;
+    font-family: var(--font-text);
+    font-size: 1rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  .text :global(.gen) {
+    padding-block: 0.12em;
+    background: var(--mark-wash);
+  }
+
+  .text :global(.gen.own) {
+    background: var(--pen-wash);
+  }
+
+  .slot {
+    margin-top: 0.5rem;
+    min-height: 1.9rem;
+  }
+
+  .gap {
+    margin-top: 0.9rem;
+  }
+
+  .verdict {
+    margin: 0.4rem 0 0;
+    min-height: 3em;
+    font-family: var(--font-text);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  fig-spec :global(.tok.kept) {
+    background: var(--mark-wash);
+    box-shadow: inset 0 0 0 1px var(--mark);
+  }
+
+  fig-spec :global(.tok.dropped) {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--rule);
+    color: var(--ink-2);
+    text-decoration: line-through;
+  }
+
+  fig-spec :global(.tok.own) {
+    background: var(--pen-wash);
+    box-shadow: inset 0 0 0 1px var(--pen);
+  }
+</style>
+
+<script>
+  import { h, tok, wait } from '../../lib/fig';
+
+  interface Round {
+    draft: string[];
+    kept: number;
+    fix: string;
+  }
+  interface Run {
+    name: string;
+    prompt: string;
+    rounds: Round[];
+  }
+
+  const shown = (text: string) => text.replace(/\n/g, '⏎\n');
+
+  class FigSpec extends HTMLElement {
+    runs: Run[] = [];
+    run = 0;
+    at = 0;
+    busy = false;
+    playing = false;
+
+    connectedCallback() {
+      this.runs = JSON.parse(this.dataset.runs ?? '[]');
+      this.part('next').addEventListener('click', () => {
+        this.stop();
+        void this.next();
+      });
+      this.part('play').addEventListener('click', () => (this.playing ? this.stop() : void this.play()));
+      this.part('reset').addEventListener('click', () => this.reset());
+      this.querySelectorAll<HTMLButtonElement>('[data-run]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.run = Number(button.dataset.run);
+          this.querySelectorAll('[data-run]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+          this.reset();
+        }),
+      );
+      this.draw();
+    }
+
+    part(name: string) {
+      return this.querySelector<HTMLElement>(`[data-${name}]`)!;
+    }
+
+    get rounds() {
+      return this.runs[this.run].rounds;
+    }
+
+    reset() {
+      this.stop();
+      this.at = 0;
+      this.part('draft').replaceChildren();
+      this.part('verdict').textContent = 'Press the button to draft the first four tokens.';
+      this.draw();
+    }
+
+    stop() {
+      this.playing = false;
+      this.part('play').textContent = 'Play';
+    }
+
+    async play() {
+      if (this.at >= this.rounds.length) this.reset();
+      this.playing = true;
+      this.part('play').textContent = 'Pause';
+      while (this.playing && this.at < this.rounds.length) {
+        await this.next();
+        await wait(500);
+      }
+      this.stop();
+    }
+
+    draw() {
+      const past = this.rounds.slice(0, this.at);
+      this.part('text').replaceChildren(
+        this.runs[this.run].prompt,
+        ...past.flatMap((round) => [
+          ...round.draft.slice(0, round.kept).map((t) => h('span', { class: 'gen' }, shown(t))),
+          h('span', { class: 'gen own' }, shown(round.fix)),
+        ]),
+      );
+
+      const tokens = past.reduce((sum, round) => sum + round.kept + 1, 0);
+      const passes = past.length;
+      const most = Math.max(tokens, 1);
+      const bar = (label: string, value: number, tone: string) =>
+        h(
+          'div',
+          { class: `bar-row wide ${tone}`.trim() },
+          h('span', { class: 'name' }, label),
+          h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', vars: { '--p': (value / most).toFixed(4) } })),
+          h('span', { class: 'val' }, String(value)),
+        );
+      this.part('score').replaceChildren(
+        bar('Tokens written', tokens, ''),
+        bar('Passes through the big model', passes, 'is-pen'),
+      );
+      (this.part('next') as HTMLButtonElement).disabled = this.at >= this.rounds.length;
+    }
+
+    async next() {
+      if (this.busy || this.at >= this.rounds.length) return;
+      this.busy = true;
+      const round = this.rounds[this.at];
+      const draft = this.part('draft');
+      const verdict = this.part('verdict');
+
+      draft.replaceChildren(...round.draft.map((t) => tok(t.replace(/\n/g, '⏎'), 'bare')));
+      verdict.textContent = 'Checking all four in one pass…';
+      await wait(650);
+
+      draft.replaceChildren(
+        ...round.draft.map((t, i) => tok(t.replace(/\n/g, '⏎'), i < round.kept ? 'kept' : 'dropped')),
+      );
+      const own = tok(round.fix.replace(/\n/g, '⏎'), 'own');
+      const all = round.kept === round.draft.length;
+      verdict.replaceChildren(
+        all
+          ? 'All four are what it would have written. It adds a fifth of its own: '
+          : round.kept === 0
+            ? 'The first guess is already wrong, so the whole draft is thrown away. Its own token: '
+            : round.kept === 1
+              ? 'The first one matches. The next does not, so the rest is thrown away. Its own token: '
+              : `The first ${['', '', 'two', 'three'][round.kept]} match. The next does not, so the rest is thrown away. Its own token: `,
+        own,
+        `. That is ${round.kept + 1} token${round.kept === 0 ? '' : 's'} for one pass.`,
+      );
+      await wait(850);
+
+      this.at++;
+      this.draw();
+      this.busy = false;
+    }
+  }
+
+  customElements.define('fig-spec', FigSpec);
+</script>

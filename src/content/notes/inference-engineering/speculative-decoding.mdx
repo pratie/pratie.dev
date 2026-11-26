@@ -1,0 +1,131 @@
+---
+title: Speculative decoding. Guess ahead, then check
+short: Speculative decoding
+description: Writing a token is slow. Checking a token somebody else wrote is nearly free. Speculative decoding uses that gap to get several tokens out of one pass through the model.
+date: 2026-11-26
+series: inference-engineering
+chapter: 8
+book:
+  - where: Section 5.2, Speculative Decoding (pp. 129–131)
+    what: The shared mechanism, the three factors that decide the gain, and why it stops helping at large batch sizes.
+  - where: Sections 5.2.1 to 5.2.4 (pp. 131–136)
+    what: Draft-target, Medusa, EAGLE, n-gram speculation and lookahead decoding, and when to pick each.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import SpecFig from '../../../components/figures/SpecFig.astro';
+import spec from '../../../data/bench/spec.json';
+import { count } from '../../../lib/calcs';
+
+export const names = ['A fact', 'A story', 'Some code', 'A list'];
+
+Something in [chapter 4](/inference-engineering/prefill-and-decode) is worth going back to. While a model writes, most of the chip's ability to calculate sits idle, waiting for weights to arrive from memory.
+
+Batching uses that idle time for other people's requests. But what if I only care about one person? Is there a way to spend the spare calculating on *their* next few tokens?
+
+There is, and it rests on a property of the model that was already there in the earlier notes.
+
+## Checking is cheaper than writing
+
+Marking an exam is much quicker than sitting it. You do not have to come up with the answers. You only have to look at each one and say right or wrong.
+
+A language model has the same lopsidedness, and here is why. One pass through the model does not only predict the next token. It produces a prediction at *every* position in the text at once. [The from-scratch note](/notes/gpt-from-scratch#the-whole-model) showed this: the output has a row of scores for each token that went in.
+
+So suppose I already had a guess for the next four tokens. I could stick them on the end of the text and run a single pass. At each of the four positions, the model tells me what it would have written there. Wherever my guess matches, I have a confirmed token, and I got it without a pass of its own.
+
+Four tokens checked for the price of one written. That is the gap speculative decoding lives in.
+
+## The loop
+
+1. Something cheap **drafts** the next few tokens.
+2. The big model **checks** all of them in one pass.
+3. Keep the drafted tokens up to the first one that is wrong. At that position, take the big model's own token instead, and throw the rest of the draft away.
+
+Every pass yields at least one token, the model's own, plus however many guesses were right before the first miss.
+
+The part that matters most: the final text is exactly what the big model would have written by itself. A wrong guess is never kept. This technique changes the speed and nothing else.
+
+## Watching it happen
+
+I set this up with two real models. DistilGPT-2 drafts four tokens at a time, and GPT-2 checks them.
+
+<SpecFig>
+
+**A real run, recorded.** Yellow tokens were drafted by the small model and confirmed by the big one. Blue tokens are the big model's own. Try all four kinds of text.
+
+</SpecFig>
+
+In every one of these runs I compared the result with what GPT-2 writes alone. They were identical, token for token.
+
+What differs between them is how often the guesses land.
+
+<BarsFig
+  label="Tokens per pass through the big model. Without drafting this is always 1."
+  rows={spec.runs.map((run, i) => ({
+    label: `${names[i]}: ${count(run.accept * 100)}% of guesses kept`,
+    value: run.tokens / run.passes,
+    text: `${count(run.tokens / run.passes, 1)} per pass`,
+    tone: i === 0 ? 'pen' : undefined,
+  }))}
+  max={spec.k + 1}
+>
+
+**The same two models on four kinds of text.** A full bar would be {spec.k + 1} tokens per pass: all {spec.k} guesses right, plus the model's own.
+
+</BarsFig>
+
+Code and the repetitive Eiffel Tower text are easy to guess, and about three quarters of the drafts survive. The story is open-ended. Almost anything could come next, so the small model is usually wrong by the second word.
+
+That makes sense. Guessing works when the text is predictable, and code is about as predictable as text gets.
+
+## Why my version is not actually faster
+
+I should be honest about this experiment. It shows the mechanism, and it would not speed anything up.
+
+DistilGPT-2 has {count(spec.draft_params / 1e6)} million parameters and GPT-2 has {count(spec.target_params / 1e6)} million. My "cheap" drafter is two thirds the size of the model it is helping, so each drafted token costs about two thirds of a big-model pass. A round of four drafts and one check then costs about {count(1 + spec.k * spec.draft_params / spec.target_params, 1)} passes.
+
+On the code and the Eiffel Tower text, that buys about four tokens, which is barely break-even. On the story it buys {count(spec.runs[1].tokens / spec.runs[1].passes, 1)}, which is a good deal slower than not drafting at all.
+
+The book's rule of thumb is that a draft model should be at least ten times smaller than the target. So what decides whether this pays?
+
+<CalcFig
+  calc="speculate"
+  inputs={[
+    { id: 'accept', label: 'Chance each guess is right', min: 10, max: 95, step: 5, value: 75, unit: '%' },
+    { id: 'draft', label: 'Tokens drafted per round', min: 1, max: 8, value: 4 },
+    { id: 'cost', label: 'Cost of one drafted token, against a big-model pass', min: 1, max: 70, value: 10, unit: '%' },
+  ]}
+>
+
+**When guessing pays.** Set the cost to 66% to see roughly where my experiment sits. Then set it to 5% and raise the number of drafted tokens.
+
+</CalcFig>
+
+Those three sliders are the three factors the book lists: how cheap a draft is, how many tokens you draft, and how often they are accepted.
+
+Notice what happens as you draft more tokens at a middling acceptance rate. The gain flattens out. A draft is only useful up to its first mistake, so the fifth and sixth tokens are rarely reached. Short, confident drafts beat long hopeful ones.
+
+## Where the guesses come from
+
+There are several ways to produce a draft, and they differ mainly in how cheap and how accurate the guesser is.
+
+**A smaller model.** What I did above. Easy to set up, since a smaller model from the same family usually exists. The cost is that a second model has to sit in memory with a cache of its own.
+
+**Extra heads on the model itself.** A method called Medusa adds a few small output layers to the big model, each trained to guess one position further ahead. No second model, but the model has to be fine-tuned. The book says it is not widely used now, and that it inspired the next one.
+
+**A purpose-built guesser.** EAGLE is a small network trained for one job only: drafting for a specific big model. Its trick is what it reads. An ordinary small model starts again from the text. EAGLE is fed the big model's internal state, the vectors it has already computed, so it starts from everything the big model knows so far. It can draft around eight tokens with a high hit rate, and the book calls it the default choice today.
+
+**No model at all.** For code, something much simpler works. Remember the sequences that appear in the prompt, and when the output starts repeating one, propose the rest of it. If you ask a model to change one line in a file, most of its output is copied from the input. A lookup table can draft ten or more of those tokens at almost no cost.
+
+## What it cannot do
+
+It does nothing for the first token. Speculation speeds up writing, and the wait for the first token is spent reading.
+
+It needs idle compute, so it competes with batching. Both want the same spare capacity. At large batch sizes there is nothing spare, and the book notes that engines switch speculation off in that case. This is a technique for making one user's stream faster, paid for by serving fewer users per GPU.
+
+And it depends on how the next token is picked. At a high temperature the choice is deliberately more random, which makes it harder to guess, so fewer drafts survive.
+
+## Where this leaves us
+
+Speculative decoding trades compute for passes. It spends calculation that was going to waste, and gets back tokens that would each have cost a full trip through the weights. When the text is predictable and the GPU has room, a stream can come out two or three times as fast, and it is the same stream.

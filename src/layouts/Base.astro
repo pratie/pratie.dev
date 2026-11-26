@@ -23,7 +23,7 @@ const {
 const pageTitle = title ? `${title} · pratie` : 'pratie';
 const path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
 const canonical = new URL(path, Astro.site);
-const inNotes = path.startsWith('/notes');
+const inNotes = path.startsWith('/notes') || path.startsWith('/inference-engineering');
 ---
 
 <!doctype html>
@@ -58,6 +58,7 @@ const inNotes = path.startsWith('/notes');
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <div class="page">
+      <slot name="rail" />
       <header class="top">
         <a class="home" href="/">pratie</a>
         <nav aria-label="Site">

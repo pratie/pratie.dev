@@ -2,7 +2,7 @@
  * A five-token, four-dimension toy for the from-scratch note.
  * Every number here was set by hand so the arithmetic can be followed by eye.
  */
-import { dot, softmax, vecMat } from './fig';
+import { dot, softmax, vecMat } from './fig.ts';
 
 export const TOKENS = ['my', 'cat', 'sleeps', 'all', 'day'];
 

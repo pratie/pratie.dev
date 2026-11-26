@@ -1,0 +1,150 @@
+---
+title: GPUs. What the spec sheet is telling you
+short: GPUs
+description: Three numbers decide what a GPU can serve and how fast. How much it can calculate, how much it can hold, and how quickly it can move what it holds.
+date: 2026-11-26
+series: inference-engineering
+chapter: 5
+book:
+  - where: Section 3.1, GPU Architecture (pp. 74–77)
+    what: Streaming multiprocessors, Tensor Cores, dense versus sparse FLOPS, VRAM and the cache levels.
+  - where: Section 3.2, GPU Architecture Generations (pp. 77–83)
+    what: Hopper, Lovelace, Blackwell and Rubin, with the spec tables these numbers come from.
+  - where: Sections 3.3 to 3.5 (pp. 83–91)
+    what: Instances, multi-GPU nodes and their interconnects, multi-instance GPUs, other accelerators, local inference.
+---
+
+import BarsFig from '../../../components/figures/BarsFig.astro';
+import CalcFig from '../../../components/figures/CalcFig.astro';
+import membw from '../../../data/bench/membw.json';
+import { count, GPUS } from '../../../lib/calcs';
+
+The last chapter ended with two limits: how fast a chip can calculate, and how fast it can fetch. So the next step is to look at the chips, and that means running into a wall of names. H100. L40. B200. Hopper. Blackwell. MIG. NVLink.
+
+Almost all of it reduces to three numbers and a naming scheme.
+
+## Why a GPU and not a CPU?
+
+A CPU is a handful of very capable workers. Each can do complicated, branching work, one step after another.
+
+A GPU is tens of thousands of simple workers who all do the same small thing at the same moment. The book calls GPUs throughput machines, and that is the right picture.
+
+Running a model is almost nothing except multiplying and adding enormous grids of numbers. Every multiplication is independent of its neighbours. That is exactly the kind of work you can hand to ten thousand simple workers at once, and exactly the kind a few clever ones are wasted on.
+
+## The three numbers
+
+**Compute** is how fast the chip does arithmetic, in FLOPS: floating-point operations per second. Datacenter GPUs do trillions, so the unit you see is teraFLOPS. This is the limit for prefill, and for image and video models.
+
+Two traps when reading this number. Spec sheets quote a "sparse" figure that assumes half the numbers are zero and can be skipped. Normal inference is not like that, so read the "dense" one. And the figure roughly doubles each time you halve the number of bits per number, so only compare two GPUs at the same precision.
+
+**Memory size** is how much the GPU can hold, in gigabytes. GPU memory is called VRAM. The model's weights have to fit, with room left over for the working memory that attention needs, the KV cache. The book's rule of thumb is at least half as much again as the weights. If the weights do not fit, the model fails to load. If the headroom runs out, requests fail halfway through.
+
+**Memory bandwidth** is how fast the chip can pull data out of that memory. This is the limit for decode, as [the last chapter](/inference-engineering/prefill-and-decode) showed. If you want more tokens per second per user, this is the number to shop for.
+
+Here are four GPUs you will hear about, with the numbers from the book's tables.
+
+| GPU | Compute, 8-bit | Memory | Bandwidth | Typical use |
+| --- | --- | --- | --- | --- |
+| L4 | 242 teraFLOPS | 24 GB | 300 GB/s | Small models, cheaply |
+| H100 | 1,979 teraFLOPS | 80 GB | 3,350 GB/s | The workhorse |
+| H200 | 1,979 teraFLOPS | 141 GB | 4,800 GB/s | Bigger models, faster decode |
+| B200 | about 5,000 teraFLOPS | 192 GB | up to 8,000 GB/s | The largest models, video |
+
+Look at the H100 and the H200. Same compute. The H200 has more memory and moves it faster. From the last chapter you can predict what that buys: it reads a prompt no quicker, and it writes the answer faster.
+
+<CalcFig
+  calc="ceiling"
+  inputs={[
+    { id: 'params', label: 'Model size, billions of parameters', min: 1, max: 400, value: 8 },
+    {
+      id: 'bits',
+      label: 'Bits per weight',
+      value: 16,
+      options: [
+        { label: '16 bits', value: 16 },
+        { label: '8 bits', value: 8 },
+        { label: '4 bits', value: 4 },
+      ],
+    },
+    { id: 'gpu', label: 'GPU', value: 0, options: GPUS.map((gpu, i) => ({ label: `${gpu.name}, ${gpu.vram} GB`, value: i })) },
+  ]}
+>
+
+**Does it fit, and what is the ceiling?** The same calculator as the last chapter, starting from a small model on the smallest GPU. Move the model size up until it stops fitting, then change the GPU.
+
+</CalcFig>
+
+## Decoding the names
+
+A name like B200 has two parts.
+
+The **letter** is the generation, which NVIDIA calls an architecture and names after a scientist: A for Ampere, H for Hopper, L for Lovelace, B for Blackwell, with Rubin arriving in 2026. A new one comes out every year or two.
+
+The **number** is the size within that generation. Bigger means more powerful and more expensive. The numbers do not follow much logic beyond that.
+
+The letter matters more than it looks, because each generation adds features and not only speed. Hopper GPUs can calculate directly with 8-bit numbers. Blackwell goes down to 4 bits. That is what makes [quantization](/inference-engineering/quantization) pay off on real hardware.
+
+One detail about Rubin caught my eye. It comes with a separate chip built for compute-heavy work like prefill. The split between reading and writing from the last chapter is now showing up in the hardware itself.
+
+## You never rent only a GPU
+
+In the cloud, the thing you rent is an **instance**: a virtual machine with one or more GPUs, plus CPUs, ordinary RAM, disk, a network connection and the wiring between the GPUs.
+
+Any of those can turn out to be the slow part. The book's example is small and telling. The same A100 GPU comes in two physical forms, and one has five percent more memory bandwidth than the other. Two instances with the same GPU name are not always the same machine.
+
+## More than one GPU
+
+Big models do not fit on one GPU, so GPUs are sold wired together. The standard unit is a **node**: eight GPUs in one box.
+
+What matters is how fast those wires are compared with the memory inside a single GPU.
+
+<BarsFig
+  label="How fast data moves, in gigabytes per second"
+  rows={[
+    { label: 'Inside one H100, memory to chip', value: 3350, text: '3,350 GB/s', tone: 'pen' },
+    { label: 'GPU to GPU inside a node (NVLink on Hopper)', value: 900, text: '900 GB/s' },
+    { label: 'Node to node (InfiniBand, one card)', value: 50, text: '50 GB/s' },
+    { label: 'Node to node (Ethernet, one card)', value: 12.5, text: '12.5 GB/s' },
+    { label: 'For scale: memory in my laptop', value: membw.read_gbs, text: `${membw.read_gbs} GB/s` },
+  ]}
+>
+
+**Each step outward is much slower.** The first four are from the book's figures, with network speeds converted from gigabits to gigabytes. The last is what I measured in the previous chapter.
+
+</BarsFig>
+
+Inside a GPU, data moves at thousands of gigabytes a second. Between two GPUs in the same box, at a quarter of that. Between two boxes, the bar is hard to see.
+
+Hold on to this picture. It decides how a model can be split across GPUs, which is [chapter 10](/inference-engineering/many-gpus). Anything that makes GPUs talk to each other constantly has to live inside one node.
+
+It also puts my laptop in its place. Its memory is about as fast as the cable between two datacenter machines, and about {count(3350 / membw.read_gbs)} times slower than the memory in one H100.
+
+## Less than one GPU
+
+The opposite problem exists too. A speech model with a couple of billion parameters cannot keep an H100 busy, and the leftover capacity is money wasted.
+
+Large GPUs can be cut into as many as seven independent pieces, each with its own share of compute and memory. This is called a **multi-instance GPU**, or MIG. Several small models can then share one big, modern chip. According to the book that is often a better deal than giving each of them an older, weaker GPU of its own.
+
+## Chips that are not from NVIDIA
+
+NVIDIA dominates, but plenty of companies make chips for inference. What helped me was the book's observation that each one is betting on a single edge:
+
+- **Memory bandwidth.** Cerebras and Groq build chips that fetch much faster, which attacks the decode limit directly. That is why they post very high tokens per second.
+- **Power.** Some chips aim to do the same work for less electricity.
+- **Integration.** Google's TPUs and Amazon's chips are built to work closely with their own clouds.
+
+They also share a problem, and it is not the silicon. Nearly all inference software is written for NVIDIA's programming system, CUDA. A chip without it has to bring its own software for everything. That is the subject of [the next chapter](/inference-engineering/software-stack).
+
+## Running it on your own machine
+
+The other alternative is not to use a datacenter at all. A model running on the user's own laptop or phone has no network delay, keeps their data on their device, and costs the developer nothing per request.
+
+The limits are the obvious ones: far less power, heat, battery, and endless variety in what people own.
+
+The book has one comparison I liked. A top consumer NVIDIA card has 32 GB of memory at 1,792 GB/s. Apple's largest desktop chip has 512 GB at 819 GB/s. Using the three numbers, you can read that directly: the Apple machine can hold enormous models and will write with them slowly, and the NVIDIA card can hold only small ones and will write with them quickly.
+
+My own laptop sits far below both, which is exactly why GPT-2 is the model I can measure on it.
+
+## Where this leaves us
+
+How much it can calculate, how much it can hold, how fast it can fetch. Compute sets the pace of reading. Bandwidth sets the pace of writing. Memory size decides what you are allowed to run at all. Everything else on the spec sheet is detail around those three.

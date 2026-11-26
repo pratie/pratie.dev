@@ -76,14 +76,15 @@
   --astro-code-token-string-expression: #a5d6a0;
 }
 
-@media (min-width: 60rem) {
+/* wide screens get a left rail, ruled off from the text by the margin line */
+@media (min-width: 64rem) {
   :root {
     --gutter: 2rem;
-    --margin-w: 10.5rem;
+    --margin-w: 16rem;
   }
 }
 
-@media (min-width: 76rem) {
+@media (min-width: 78rem) {
   :root {
     --bleed: 9rem;
   }
@@ -191,7 +192,7 @@ pre {
 }
 
 /* the margin line of a legal pad; only when there is a margin to rule off */
-@media (min-width: 60rem) {
+@media (min-width: 64rem) {
   .page::before {
     content: '';
     position: absolute;
@@ -290,7 +291,7 @@ pre {
   color: inherit;
 }
 
-/* a row whose label sits in the margin on wide screens */
+/* a small heading over a list: section labels on the front page, "Read first" on notes */
 .row {
   position: relative;
 }
@@ -302,15 +303,90 @@ pre {
   line-height: 1.4;
 }
 
-@media (min-width: 60rem) {
-  .side {
+/* ---------- the rail: everything on the site, in the margin ---------- */
+
+.rail {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .rail {
+    display: block;
     position: absolute;
-    right: 100%;
-    top: 0.2em;
-    width: 7.5rem;
-    margin: 0 2.5rem 0 0;
-    font-size: 0.875rem;
-    text-align: right;
+    inset-block: 0;
+    left: var(--gutter);
+    width: calc(var(--margin-w) - 3.5rem);
+  }
+
+  .rail-inner {
+    position: sticky;
+    top: 0;
+    max-height: 100dvh;
+    padding-block: 2rem;
+    overflow-y: auto;
+    scrollbar-width: none;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .rail nav + nav {
+    margin-top: 1.75rem;
+  }
+
+  .rail-title {
+    margin: 0 0 0.65rem;
+    font-weight: 700;
+  }
+
+  .rail ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .rail a {
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+
+  .rail-title a {
+    color: var(--ink);
+  }
+
+  .rail a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+
+  .rail ol.numbered > li > a {
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+  }
+
+  .rail .num {
+    font-family: var(--font-mono);
+  }
+
+  .rail a[aria-current='page'] {
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  .rail .sections {
+    margin: 0.55rem 0 0.35rem;
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--rule);
+    gap: 0.45rem;
+  }
+
+  .rail ol.numbered .sections {
+    margin-left: 1.5rem;
+  }
+
+  .rail .sections a[aria-current='true'] {
+    color: var(--pen);
   }
 }
 
@@ -461,35 +537,7 @@ pre {
   margin-top: 2.5rem;
 }
 
-.toc {
-  font-size: 0.8125rem;
-  line-height: 1.4;
-}
-
-.toc ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.toc a {
-  color: var(--ink-2);
-  text-decoration: none;
-}
-
-.toc a:hover {
-  color: var(--ink);
-  text-decoration: underline;
-}
-
-.toc a[aria-current='true'] {
-  color: var(--ink);
-  font-weight: 700;
-}
-
-/* narrow screens: contents fold away above the text */
+/* narrow screens have no rail, so a note's contents fold away above its text */
 .toc-fold {
   max-width: var(--text-w);
   margin-bottom: 2rem;
@@ -511,31 +559,9 @@ pre {
   gap: 0.4rem;
 }
 
-.toc-rail {
-  display: none;
-}
-
-@media (min-width: 60rem) {
+@media (min-width: 64rem) {
   .toc-fold {
     display: none;
-  }
-
-  .toc-rail {
-    display: block;
-    position: absolute;
-    inset-block: 0;
-    right: 100%;
-    width: 7.5rem;
-    margin-right: 2.5rem;
-    text-align: right;
-  }
-
-  .toc-rail .toc {
-    position: sticky;
-    top: 2rem;
-    max-height: calc(100dvh - 4rem);
-    overflow-y: auto;
-    scrollbar-width: none;
   }
 }
 
@@ -964,6 +990,46 @@ mark {
 
 .bar-row .pct {
   text-align: right;
+}
+
+/* rows with a sentence for a label and a value with a unit: calculators and measurements */
+.bar-row.wide {
+  grid-template-columns: minmax(5.5rem, 13rem) 1fr minmax(4.5rem, auto);
+}
+
+.bar-row.wide .name {
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.3;
+}
+
+.bar-row.wide .val {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bar-row.is-pen .bar-fill {
+  background: var(--pen);
+}
+
+.bar-row.is-pen .val {
+  color: var(--pen);
+  font-weight: 700;
+}
+
+.bar-row.is-warn .bar-fill {
+  background: var(--warn);
+}
+
+.bar-row.is-warn .val {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+@media (max-width: 34rem) {
+  .bar-row.wide {
+    grid-template-columns: minmax(5.5rem, 1fr) 4rem minmax(4.5rem, auto);
+  }
 }
 
 /* number cells: heat is 0..1, signed cells set --heat-color */

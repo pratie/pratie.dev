@@ -1,0 +1,181 @@
+---
+// A traffic spike against an autoscaler: how long new replicas take decides who waits.
+import Figure from './Figure.astro';
+import { STEPS, simulate } from '../../lib/sim';
+
+const uid = crypto.randomUUID().slice(0, 8);
+const start = { cold: 120, min: 2, delay: 60 };
+const first = simulate(start);
+const rows = [
+  { id: 'arriving', label: 'Requests arriving' },
+  { id: 'ready', label: 'Replicas serving' },
+  { id: 'waiting', label: 'Requests waiting' },
+];
+---
+
+<Figure interactive>
+  <fig-scale>
+    <div class="knobs">
+      <div class="slider">
+        <label for={`cold-${uid}`}>Cold start</label>
+        <input id={`cold-${uid}`} type="range" min="0" max="300" step="10" value={start.cold} data-in="cold" />
+        <output for={`cold-${uid}`} data-out="cold">{start.cold} s</output>
+      </div>
+      <div class="slider">
+        <label for={`min-${uid}`}>Always running</label>
+        <input id={`min-${uid}`} type="range" min="1" max="8" step="1" value={start.min} data-in="min" />
+        <output for={`min-${uid}`} data-out="min">{start.min}</output>
+      </div>
+      <div class="slider">
+        <label for={`delay-${uid}`}>Scale-down delay</label>
+        <input id={`delay-${uid}`} type="range" min="0" max="300" step="10" value={start.delay} data-in="delay" />
+        <output for={`delay-${uid}`} data-out="delay">{start.delay} s</output>
+      </div>
+    </div>
+
+    <div class="sheet">
+      {
+        rows.map((row) => (
+          <div class="lane">
+            <span class="head">{row.label}</span>
+            <div class="ticks" data-lane={row.id}>
+              {Array.from({ length: STEPS }, () => <span class:list={['tick', { warn: row.id === 'waiting' }]} />)}
+            </div>
+          </div>
+        ))
+      }
+      <p class="axis"><span>start</span><span>eight minutes, left to right</span><span>end</span></p>
+    </div>
+
+    <div class="sheet">
+      <div class="bars" data-score></div>
+      <p class="verdict" data-verdict aria-live="polite">
+        The longest wait is {first.worstWait} seconds.
+      </p>
+    </div>
+  </fig-scale>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-scale {
+    display: block;
+  }
+
+  fig-scale > * + * {
+    margin-top: 1rem;
+  }
+
+  .knobs {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .slider {
+    grid-template-columns: minmax(6.5rem, 11rem) minmax(4rem, 1fr) 3.5rem;
+  }
+
+  .lane + .lane {
+    margin-top: 0.7rem;
+  }
+
+  .head {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--ink-2);
+    font-size: 0.75rem;
+  }
+
+  .ticks {
+    display: grid;
+    grid-template-columns: repeat(48, minmax(0, 1fr));
+    gap: 1px;
+  }
+
+  .tick {
+    display: block;
+    height: 1.2rem;
+    border-radius: 1px;
+    background: color-mix(in oklab, var(--pen) calc(var(--heat, 0) * 100%), var(--field));
+  }
+
+  .tick.warn {
+    background: color-mix(in oklab, var(--warn) calc(var(--heat, 0) * 100%), var(--field));
+  }
+
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+
+  .verdict {
+    margin: 0.9rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--rule);
+    min-height: 4.4em;
+    font-family: var(--font-text);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+</style>
+
+<script>
+  import { h } from '../../lib/fig';
+  import { span } from '../../lib/calcs';
+  import { simulate, SPIKE, type SimStep } from '../../lib/sim';
+
+  class FigScale extends HTMLElement {
+    connectedCallback() {
+      this.querySelectorAll('[data-in]').forEach((input) => input.addEventListener('input', () => this.draw()));
+      this.draw();
+    }
+
+    value(name: string) {
+      return Number(this.querySelector<HTMLInputElement>(`[data-in="${name}"]`)!.value);
+    }
+
+    lane(name: keyof SimStep, steps: SimStep[], full: number) {
+      this.querySelectorAll<HTMLElement>(`[data-lane="${name}"] .tick`).forEach((tick, i) => {
+        tick.style.setProperty('--heat', String(Math.min(1, steps[i][name] / full)));
+      });
+    }
+
+    draw() {
+      const input = { cold: this.value('cold'), min: this.value('min'), delay: this.value('delay') };
+      this.querySelector('[data-out="cold"]')!.textContent = `${input.cold} s`;
+      this.querySelector('[data-out="min"]')!.textContent = String(input.min);
+      this.querySelector('[data-out="delay"]')!.textContent = `${input.delay} s`;
+
+      const result = simulate(input);
+      this.lane('arriving', result.steps, SPIKE.busy);
+      this.lane('ready', result.steps, 12);
+      this.lane('waiting', result.steps, Math.max(result.peakWaiting, 60));
+
+      const bar = (label: string, text: string, value: number, tone: string) =>
+        h(
+          'div',
+          { class: `bar-row wide ${tone}`.trim() },
+          h('span', { class: 'name' }, label),
+          h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', vars: { '--p': Math.min(1, value).toFixed(4) } })),
+          h('span', { class: 'val' }, text),
+        );
+      this.querySelector('[data-score]')!.replaceChildren(
+        bar('Longest wait in the queue', span(result.worstWait), result.worstWait / 300, result.worstWait > 30 ? 'is-warn' : ''),
+        bar('Replica time paid for', span(result.paid), result.paid / (12 * 480), ''),
+        bar('Of which idle', span(result.idle), result.idle / (12 * 480), ''),
+      );
+
+      this.querySelector('[data-verdict]')!.textContent =
+        result.worstWait === 0
+          ? `Nobody waits. The price is ${span(result.idle)} of replica time that did no work.`
+          : result.worstWait <= 30
+            ? `The spike is absorbed almost at once: the longest wait is ${span(result.worstWait)}.`
+            : `When traffic jumps, new replicas take ${span(input.cold)} to arrive. Until then ${result.peakWaiting} requests pile up and the unluckiest one waits ${span(result.worstWait)}.`;
+    }
+  }
+
+  customElements.define('fig-scale', FigScale);
+</script>

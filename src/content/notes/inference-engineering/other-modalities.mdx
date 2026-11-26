@@ -1,0 +1,151 @@
+---
+title: Beyond text. Images, speech, video and embeddings
+short: Other kinds of model
+description: Everything so far was about language models. Most other models turn out to be one of two kinds, and once you know which kind, you already know roughly how it will behave.
+date: 2026-11-26
+series: inference-engineering
+chapter: 11
+book:
+  - where: Section 2.3, Image Generation Inference Mechanics (pp. 55–61)
+    what: How denoising models work, latent space, few-step models and video generation.
+  - where: Sections 6.1 and 6.2 (pp. 156–162)
+    what: Vision language models and embedding models.
+  - where: Sections 6.3 and 6.4 (pp. 162–169)
+    what: Speech recognition and speech synthesis, live and in bulk.
+  - where: Sections 6.5 and 6.6 (pp. 169–176)
+    what: Optimising image and video generation, including guidance, caching and context parallelism.
+---
+
+import CalcFig from '../../../components/figures/CalcFig.astro';
+
+Up to here, everything has been text in and text out.
+
+You might expect each other kind of model to need its own set of ideas: one for speech, another for images, another for video. Mostly, they do not. Nearly every generative model is one of two kinds, and [chapter 4](/inference-engineering/prefill-and-decode) already tells you how each kind behaves.
+
+## Two families
+
+**Token writers** produce their output one token at a time, each depending on all the ones before. Language models are the famous example. Speech models and models that read images work the same way.
+
+**Denoisers** start from random noise and clean it up over a fixed number of steps, working on the whole output at once in every step. Image and video generators work like this.
+
+That one distinction settles the bottleneck.
+
+A token writer spends its time in decode, fetching the weights again for every token. It is limited by memory bandwidth, and everything from the last four chapters applies: the KV cache, quantization, speculation, the same engines.
+
+A denoiser has no decode. Every step is like prefill, a large calculation over everything at once. It is limited by compute, and it needs different tricks.
+
+So for each kind of model below, I ask two questions. Which family is it? And what does "fast" mean for the person using it?
+
+## Models that read pictures
+
+A vision language model takes images along with text and answers in text. Inside, it is an ordinary language model with a small extra model bolted on the front, a vision encoder, that turns a picture into tokens.
+
+That is the whole trick, and it has one consequence. The book's rule of thumb is that one high-resolution image becomes about a thousand tokens.
+
+So to the language model, a picture is a very long prompt. All the costs are the costs of long prompts: a slow first token and a large [KV cache](/inference-engineering/kv-cache). Every technique for long prompts helps, and prefix caching helps most, because people tend to ask several questions about the same image.
+
+Video makes this extreme. At 24 frames a second and a thousand tokens a frame, four seconds of video would be close to a hundred thousand tokens. Nobody does that. The frames are thinned out and shrunk first. That gives a new dial that language models do not have: how much of the picture to throw away before the model sees it.
+
+## Embedding models
+
+An embedding model turns a piece of text into one vector that captures its meaning, so that similar texts land close together. Search, retrieval and recommendations are built on this.
+
+What struck me is that it only reads. It never writes a single token. So there is no decode, and most of the toolbox simply does not apply. No speculation, no cache to carry between tokens, nothing to disaggregate. The models are small, so there is no point splitting one across GPUs either.
+
+What is left is throughput. An embedding model can take dozens or hundreds of texts in one request and work through them together, so batching and a good queue matter more here than anywhere else.
+
+The book also points out that these models get two very different kinds of traffic: huge background jobs that embed millions of documents, and single live lookups where someone is waiting. That is the online and offline split from [chapter 2](/inference-engineering/know-your-workload), and the advice is the same. If you have both, run them separately.
+
+One practical tip I liked. After quantizing an embedding model, checking quality is easy: embed the same texts with both versions and compare the vectors. The book's bar is at least 99% similarity.
+
+## Speech to text
+
+A speech recognition model takes audio and writes text. Whisper is the best known open one. It has two halves: an encoder that listens to the audio, and a decoder that writes the words, token by token, exactly like a language model. Almost all the time goes into the decoder, so it is a token writer.
+
+It is also small, about one and a half billion parameters. That is too small to keep a big GPU busy, which makes it a natural fit for [a slice of one](/inference-engineering/gpus).
+
+What "fast" means depends entirely on the use.
+
+**Live speech.** Someone is dictating or talking to a voice agent. What matters is the round trip for one short piece of audio, and the book suggests aiming for about 200 milliseconds. The surprising part is where the gains come from. The model is already quick, so the work is around it: keeping one connection open and streaming audio through it, and using a tiny extra model to notice pauses, so the audio is cut between words and never in the middle of one.
+
+**Long recordings.** Nobody is waiting on each sentence. Whisper only takes about thirty seconds of audio at a time, so an hour-long recording is cut into pieces at the silences, the pieces are transcribed at the same moment on as many GPUs as you have, and the text is stitched together afterwards. Speed here is measured as how many times faster than real time it runs. The book's figure for a well-tuned setup is an hour of audio in under four seconds.
+
+## Text to speech
+
+This one held the biggest surprise for me. A modern speech model is a language model. The book's example, Orpheus, is built on a three-billion-parameter Llama. Its vocabulary has been extended with tens of thousands of extra tokens that stand for little pieces of sound, and a separate small decoder turns those sound tokens into an audio wave.
+
+So it is a token writer, and all the usual techniques apply. But the goal is different in a way I had not thought about.
+
+Speech plays at a fixed speed. The book says it takes roughly 80 to 100 tokens a second to produce audio in real time. If the model writes faster than that for one listener, the extra speed is wasted. They cannot hear it any sooner.
+
+That flips the aim of optimisation. For a chat model you want each person's stream as fast as possible. For speech you want exactly real-time speed, for as many people at once as the GPU can manage. If a GPU can write 4,000 tokens a second in total, and each listener needs 90, it can hold about 44 conversations.
+
+The number that does matter per person is the wait before the first sound, and more usefully, before the first whole sentence.
+
+Voice agents chain three of these models together: speech to text, then a language model, then text to speech. Single models that go straight from speech to speech exist. The book's view is that, for now, the three-step chain is still better and cheaper.
+
+## Image generation
+
+Now the other family.
+
+An image generator starts with a grid of random noise and improves it step by step until it is a picture. Most models take 30 to 50 steps.
+
+Three details from the book make this click.
+
+It does not work on pixels. A 1024 by 1024 image is over a million pixels, far too many to process again at every step. The model works on a much smaller grid, called the **latent space**, with about one percent as many values, and a separate small model turns the result into pixels at the end.
+
+It is a pipeline, not one model. One part reads the text prompt. One part does the denoising. One part converts to pixels.
+
+And each step runs the denoiser twice: once following the prompt and once ignoring it. The two results are blended, and how strongly the prompt wins is a setting called guidance. So 50 steps are really 100 passes through the model.
+
+Every one of those passes works on the whole image, which is why this is limited by compute. Fetching is not the problem. The work is.
+
+So how do you make it faster? You can use better kernels and compile the model for your exact GPU, as in [chapter 6](/inference-engineering/software-stack). You can use a model that was trained to need only a handful of steps, at some cost in quality. And then there is a trick the book describes that I enjoyed.
+
+The early steps decide the layout of the picture. The later steps only fill in detail. A model halfway through drawing a cat is not going to change its mind and draw a dog. So the prompt matters most at the start, and you can stop running the second, prompt-following pass for the later steps.
+
+<CalcFig
+  calc="imagesteps"
+  inputs={[
+    { id: 'steps', label: 'Denoising steps', min: 4, max: 60, value: 50 },
+    { id: 'until', label: 'Steps that use guidance', min: 10, max: 100, step: 10, value: 60, unit: '%' },
+    { id: 'pass', label: 'Time for one pass', min: 20, max: 500, step: 10, value: 80, unit: ' ms' },
+  ]}
+>
+
+**Fewer passes, same number of steps.** The pass time is made up. The arithmetic is the book's: with guidance on only the first 30 of 50 steps, 100 passes become 80.
+
+</CalcFig>
+
+There is one difficulty that language models do not have. How do you know whether an optimisation made the pictures worse? There is no loss to check. The book is frank that judging images is mostly done by showing them to people.
+
+## Video generation
+
+Video is image generation with time added. The whole clip is held as one large block of latent values, and every step refines all of it together. Early models made one frame at a time and small errors piled up, frame after frame, until the video fell apart.
+
+Everything about this is heavy. Each frame has to pay attention to every other frame, and the book puts attention at 70 to 80 percent of the compute. A single request typically takes a whole node of eight GPUs to itself.
+
+That last fact changes the economics. With language models you can always trade some speed for more throughput by batching. Here there is no batch to adjust. One request, eight GPUs. The only way to make video cheaper is to make the model itself faster.
+
+The book's tools for that are familiar ideas in new shapes:
+
+- **Caching between steps.** Parts of one step's work can be reused in the next. The book says this can make generation 30 to 40 percent faster, and that it ranges from harmless to ruinous, so it needs careful testing.
+- **Quantizing attention, selectively.** Risky, as [chapter 7](/inference-engineering/quantization) explained. So it is done only on the later steps and the middle layers, where errors matter least.
+- **A different way of sharing GPUs.** Instead of cutting the weights across the eight GPUs, every GPU gets a full copy of the model, which is small, and the enormous attention calculation is what gets split up.
+
+The book compares video models today to language models two years earlier: slow, limited to short outputs, and using every bit of the best hardware available. That comparison is a good reason to be patient with them.
+
+## The same questions, six answers
+
+| Kind of model | Family | What limits it | What "fast" means |
+| --- | --- | --- | --- |
+| Reads pictures | Token writer | Very long prompts | A quick first token |
+| Embeddings | Reads only | How much it can batch | Texts per second, or one quick lookup |
+| Speech to text | Token writer | Its decoder | Round trip per phrase, or hours per second |
+| Text to speech | Token writer | Real-time playback | First sound, and listeners per GPU |
+| Images | Denoiser | Compute | Seconds per picture |
+| Video | Denoiser | Compute, mostly attention | Compute time per second of video |
+
+## Where this leaves us
+
+Six kinds of model turned out to be two families. If a model writes tokens, it is the last seven chapters again with different numbers. If it denoises, it is compute bound from start to finish, and the question becomes how many passes you can avoid.

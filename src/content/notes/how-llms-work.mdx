@@ -1,6 +1,7 @@
 ---
 title: How an LLM works, end to end
-description: Start here. One sentence goes into a real model and one word comes out. Every stage in between, with the actual numbers from GPT-2.
+short: How an LLM works
+description: Start here. One sentence goes into a real model and one word comes out. Every stage in between, with the actual numbers from GPT-2 and no maths needed.
 date: 2026-11-26
 order: 1
 ---
@@ -16,17 +17,34 @@ import SamplerFig from '../../components/figures/SamplerFig.astro';
 import SurprisalFig from '../../components/figures/SurprisalFig.astro';
 import Tok from '../../components/figures/Tok.astro';
 
-I use language models every day, and I learned the theory a few years ago. Every time I come back to it I understand it a little differently, which is a polite way of saying I never understood it properly. These notes are me writing it down until it stops moving.
+I use language models every day. I studied how they work a few years ago. And every time I come back to the subject I understand it a bit differently, which is a polite way of saying I never understood it properly.
 
-This first one is the map. It follows one sentence through a real model, from the first character to the next word. Later notes zoom into one stage at a time and link back here.
+So this is me writing it down until it stops moving.
 
-The model is GPT-2 small: OpenAI, 2019, 124 million parameters. GPT-3, a year later, was more than a thousand times bigger. But GPT-2 runs on my laptop, so every number on this page is real. I ran the model and saved what it did. Today's models are far larger and far better trained. The machinery is the same.
+This first note is the whole picture on one page. You do not need maths or programming to follow it. If you have used ChatGPT, or watched your phone suggest the next word as you type, you already have the starting point.
+
+I did one thing differently from most explanations. I did not want made-up examples, so I ran a real model on my laptop and saved what it did. The figures on this page replay it.
+
+The model is GPT-2 small, which OpenAI released in 2019. Think of it as an early ancestor of the models behind ChatGPT. By today's standards it is tiny and not very bright, and that turns out to be useful. It is small enough to run at home and look inside, and its mistakes are easy to see. Today's models are far bigger and far better trained. GPT-3, only a year later, was already more than a thousand times larger. But they are built the same way.
 
 ## The loop
 
-A language model is a function. You give it a list of tokens. It gives back a probability for every token in its vocabulary: how likely each one is to come next.
+Let me start with the most useful thing I know about a language model. It only ever does one small job.
 
-That is all it does. It does not write a paragraph. To get a paragraph, you call the function, pick one token using those probabilities, put it on the end of the list, and call the function again.
+You give it some text. It gives you back a list of everything that could come next, with a probability next to each item.
+
+That is all. It does not write a sentence, let alone an essay. It is the same job your phone's keyboard does when it offers three words above the keys, done far better.
+
+So how does a whole answer come out? By doing that one job over and over:
+
+1. Hand the model the text so far.
+2. It gives every possible next piece a probability.
+3. Pick one.
+4. Stick it on the end, and go back to step 1.
+
+A word about "piece". Models do not work in whole words. They work in **tokens**, which are words or parts of words. For now, read "token" as "word". The next section explains the difference.
+
+Here is one trip around the loop with the stages inside the model spelled out. The names will mean more as you read on, and each one links to its section.
 
 <Pipeline
   label="One pass through the model"
@@ -40,7 +58,7 @@ That is all it does. It does not write a paragraph. To get a paragraph, you call
   ]}
 />
 
-Here is that loop running. I gave GPT-2 the words "The Eiffel Tower is located in the city of" and recorded what it did, three times.
+Now let's watch it run. I gave GPT-2 the words "The Eiffel Tower is located in the city of" and recorded what it did, three separate times. Press **Next token**.
 
 <LoopFig>
 
@@ -48,21 +66,33 @@ Here is that loop running. I gave GPT-2 the words "The Eiffel Tower is located i
 
 </LoopFig>
 
-Step through all three runs. They show most of what there is to know about these models.
+Step through all three runs. Most of what there is to know about these models shows up right here.
 
-**It is unsure.** London and Paris are tied at 6.9% each. The model has learned that a city belongs here. It has not learned which one.
+**It does not know. It estimates.** Look at the very first step. London and Paris are tied at about 7% each. The model has learned that a city belongs in this spot. It has not learned which one. A bigger model gets this right, and it gets it right in exactly the same way: by putting a higher percentage on Paris.
 
-**It makes things up.** In the first run it says Paris, then adds that the tower "was named tallest spire in 2018 by Luxplier". There is no Luxplier. Nothing in the loop checks facts. Each step only asks what is likely to come next, and after "named tallest spire in 2018 by", an organisation's name is likely.
+**It makes things up, fluently.** In the first run it says Paris, then adds that the tower "was named tallest spire in 2018 by Luxplier". There is no Luxplier. Why would it invent one? Because nothing in the loop checks facts. Every step asks only what is likely to come next, and after "named tallest spire in 2018 by", the name of some organisation is likely.
 
-**Always taking the favourite does not fix it.** The third run says London, and then gets stuck: "the tallest building in the world. It is located in the heart of London, and is the tallest building in".
+**The same question gets different answers.** The first two runs start from identical text and end up in different cities. Step 3 of the loop is a roll of the dice, so this is by design.
 
-The rest of this note opens up the function, one stage at a time.
+**Playing it safe does not fix it.** You might think: skip the dice and always take the favourite. That is the third button. It says London, and then gets stuck: "the tallest building in the world. It is located in the heart of London, and is the tallest building in".
+
+So that is the loop. The rest of this note opens up the box in the middle. What happens between text going in and probabilities coming out?
 
 ## Tokens
 
-The model cannot read letters. Its input is a list of integers, and a tokenizer does the translation. The vocabulary has to have a fixed size, which rules out the obvious choices. Whole words: there are too many, and a new word would have no number. Single characters: a tiny vocabulary, but every sentence becomes very long, and the model has to learn spelling before it can learn anything else.
+The first problem is almost embarrassing. A model is made of arithmetic, and you cannot do arithmetic on letters. Text has to become numbers before anything else can happen.
 
-The compromise is pieces of words, found by an algorithm called byte-pair encoding. Start with the 256 possible bytes as your vocabulary. Find the pair of neighbouring tokens that appears most often in your text and glue it into one new token. Repeat. Common words end up as a single token. Rare words stay as a few pieces. And nothing is ever unspellable, because the single bytes never leave the vocabulary.
+The obvious idea is to give every word its own number. Why not? Because there are too many words, and people keep inventing new ones. A word the model had never seen would have no number at all.
+
+The opposite idea is one number per letter. That copes with any word. But now every sentence is very long, and the model has to work out spelling before it can learn anything interesting.
+
+What models use sits between the two: pieces of words. Common words get a number of their own. Rare words are spelled out of smaller pieces. These pieces are the **tokens**, and the full list of them is the model's **vocabulary**.
+
+How do you decide which pieces deserve a number? With a method simple enough to watch. It is called byte-pair encoding.
+
+Start with single characters. Strictly it is bytes, the 256 basic values that all computer text is built from, but for English that is nearly the same thing. Look through a lot of text and find the two neighbours that turn up together most often, say "t" followed by "h". Glue that pair into one new token. Look again, and glue the next most common pair. Keep going.
+
+After enough rounds, common words have been glued into a single token and rare words are still in a few pieces. And nothing is ever impossible to write, because the single characters are still there to fall back on.
 
 <BpeFig>
 
@@ -70,7 +100,7 @@ The compromise is pieces of words, found by an algorithm called byte-pair encodi
 
 </BpeFig>
 
-GPT-2's tokenizer was built the same way on a huge pile of web text, and it stopped after 50,000 merges. That is where the vocabulary size comes from: 256 bytes, 50,000 merges and one special end-of-text token make 50,257.
+GPT-2's vocabulary was built exactly this way, on a huge pile of text from the web, and it stopped after 50,000 rounds of gluing. That is where its size comes from: 256 basic values, 50,000 glued pieces and one special token that means "end of text". 50,257 in all.
 
 This is what it does with our sentence, and with a few other strings:
 
@@ -80,42 +110,54 @@ This is what it does with our sentence, and with a few other strings:
 
 </TokensFig>
 
-A few things here leak into everyday work:
+A few things in that figure leak into everyday work:
 
-- The space belongs to the token after it. <Tok t=" hello" />, <Tok t="hello" /> and <Tok t="Hello" /> are three unrelated integers as far as the model is concerned.
+- The space belongs to the token after it. <Tok t=" hello" />, <Tok t="hello" /> and <Tok t="Hello" /> are three unrelated numbers as far as the model is concerned.
 - Rare words cost more. "Eiffel" is three tokens. So is my handle.
-- Numbers get chopped wherever the merges happened to fall. <Tok t=" 2026" /> is <Tok t=" 20" /> and <Tok t="26" />, which is one reason arithmetic is harder for these models than it looks.
-- Prices, context limits and speed are all counted in tokens. In English a token is about four characters, or three quarters of a word.
+- Numbers get chopped wherever the gluing happened to fall. <Tok t=" 2026" /> is <Tok t=" 20" /> and <Tok t="26" />, which is one reason arithmetic is harder for these models than it looks.
+- Everything is counted in tokens: prices, the limit on how much a model can read, and speed. In English a token is about four characters, or three quarters of a word.
 
 ## Embeddings
 
-An integer like 8765 means nothing by itself. It is not "more" than 412. So the first thing the model does is swap each token for a vector: one row from a big table. GPT-2's table has a row for every token and 768 columns. That is 38.6 million numbers, almost a third of the whole model.
+Now the sentence is a list of numbers: 464, 412, 733 and so on. But these numbers are only labels. Token 8765 is not "more" than token 412, any more than a number 73 bus is more than a number 12 bus.
 
-Nobody fills in that table. It starts as random noise, and training nudges it until tokens that behave alike sit near each other.
+So what can the model do arithmetic on? It needs numbers that say something about what a token means.
+
+The answer is to give every token a whole list of numbers instead of one. GPT-2 uses 768 numbers per token. A list of numbers like this is called a **vector**, and the vector that belongs to a token is its **embedding**.
+
+How do you picture 768 numbers? Start with two. Two numbers can be a position on a map: so far east, so far north. Things that are alike can be put near each other. Now imagine a map with 768 directions instead of two. Nobody can picture that, and the idea still holds. Every token has a position, and tokens that behave alike sit close together.
+
+All of these lists live in one big table with a row for every token. In GPT-2 that table holds 38.6 million numbers, almost a third of the whole model.
+
+Here is the part I find remarkable. Nobody fills in that table. It starts as random noise. Training, which I get to below, nudges the numbers a little at a time, and the map arranges itself.
 
 <EmbedFig>
 
-**51 rows of GPT-2's embedding table**, squashed from 768 dimensions down to two with t-SNE. The map is approximate: t-SNE keeps neighbours together and distorts everything else, and I nudged the labels apart so they can be read. The list underneath is exact, measured in all 768 dimensions against the whole vocabulary.
+**51 rows of GPT-2's embedding table**, squashed from 768 directions down to two so they can be drawn. The map is approximate: the method used, called t-SNE, keeps neighbours together and distorts everything else, and I nudged the labels apart so they can be read. The list underneath is exact. It is measured in all 768 directions, against the whole vocabulary, and a score of 1 would mean identical.
 
 </EmbedFig>
 
-Nobody told the model that Tuesday is a day, or that Paris has something to do with France. It worked that out because those tokens are useful in the same places.
+Nobody told the model that Tuesday is a day, or that Paris has something to do with France. It ended up with them close together because those tokens are useful in the same kinds of places.
 
-Two things about this stage matter later.
+Two limits of this step matter for what comes next.
 
-This is only a starting point. The token <Tok t=" bank" /> gets the same row whether the sentence is about rivers or money. Sorting that out is the job of the next stage.
+It is only a starting point. The token <Tok t=" bank" /> gets the same row whether the sentence is about a river or about money. Something later has to sort that out.
 
-And the table knows nothing about order. GPT-2 keeps a second table with one row per position, and adds the position's row to the token's row. That second table has 1,024 rows, which is exactly why GPT-2 cannot read more than 1,024 tokens at once.
+And the table knows nothing about order. "Dog bites man" and "man bites dog" would look the same. GPT-2 fixes that with a second, smaller table that has a row for each position: first, second, third, up to 1,024. The position's row is added to the token's row. That second table is also exactly why GPT-2 cannot read more than 1,024 tokens at once.
 
 ## The blocks
 
-Now there is one vector of 768 numbers per token. The middle of the model is 12 blocks stacked on top of each other, all with the same design, and each block does two things to every vector.
+At this point every token is a list of 768 numbers that describes that token alone. The token <Tok t=" of" /> at the end of our sentence knows that it is the word "of". It has no idea what the sentence was about.
+
+The middle of the model exists to fix that. It is a stack of 12 **blocks**, all built the same way, and each block does two things to every token's vector.
 
 ### Attention: tokens read each other
 
-Each token looks back over the tokens before it and pulls in what it needs. This is the only place where information moves between positions. It is how the vector sitting at <Tok t=" of" /> finds out that the sentence was about the Eiffel Tower.
+Think about what that last token needs. To have any chance of continuing with a city, it has to find out that the sentence was about the Eiffel Tower. That information is sitting several tokens back.
 
-A block has 12 attention heads working side by side, and each head learns its own habit of where to look.
+**Attention** is the step where it goes and gets it. Each token looks back over the tokens before it, decides which ones matter to it, and pulls in some of what they hold. This is the only place in the whole model where information moves from one position to another.
+
+A block does not do this just once. It has 12 **attention heads** working side by side, and each head has picked up its own habit of where to look.
 
 <AttnFig>
 
@@ -125,23 +167,27 @@ A block has 12 attention heads working side by side, and each head learns its ow
 
 Three things to take from this.
 
-A token can only look backwards. During training the model has to predict every next token without seeing it, so everything to the right is hidden.
+A token can only look backwards. When the model was being trained, it had to guess every next token without seeing it, so everything to the right is hidden.
 
 Most heads, most of the time, are doing nothing. Averaged over all 144 heads on this sentence, about two thirds of the attention lands on the start token. That is how a head says "nothing for me here".
 
 The useful ones are specific. Head 4.11 always looks one token back. Head 9.8 sits idle until the sentence needs a place, then looks at the thing whose place it is.
 
-How a head computes those weights, with queries, keys and values, is worked through with small numbers in [the from-scratch note](/notes/gpt-from-scratch#attention).
+How does a head work out where to look? That takes some arithmetic, and I go through it with small numbers in [the from-scratch note](/notes/gpt-from-scratch#attention).
 
 ### The MLP: each token thinks alone
 
-After attention, every vector goes through a small two-layer network by itself, with no contact with the other positions. If attention gathers information, this is where the model does something with it. Two thirds of each block's parameters live here.
+Attention gathers information. Something then has to use it.
+
+After attention, every token's vector goes through a small network of its own, with no contact with the other tokens. This part is called the **MLP**, short for multi-layer perceptron, a name left over from the early days of neural networks. If attention is asking around, the MLP is thinking it over. Two thirds of each block's numbers live here.
 
 ### Each block adds, it does not replace
 
-Neither step overwrites the vector. Each one adds its result to what was already there. So a token's vector is a running total that every block writes into, and that is what makes it possible to stack 12 blocks, or 100, without the signal getting lost.
+One detail matters more than it seems. Neither step throws the old vector away. Each one works out a change and adds it on.
 
-You can watch the running total change. Take the vector at the last position after each block, and ask what the model would predict if it stopped right there:
+So a token's vector is a running total, and every block writes a little more into it. That is what lets you stack 12 blocks, or 100, without the original information getting lost along the way.
+
+And because it is a running total, you can peek at it partway through. Take the vector at the last position after each block and ask: if the model stopped right here, what would it say?
 
 <LensFig>
 
@@ -151,19 +197,23 @@ You can watch the running total change. Take the vector at the last position aft
 
 For the first five blocks the best guess is <Tok t=" the" />. That is the commonest word after "of", and guessing it takes no understanding at all. Around block 6 it starts naming places. By block 10 it has narrowed things down to European capitals. Then the last two blocks make it *less* sure, and London drops from 35% to 7%.
 
-I do not have a tidy explanation for that last part. The late layers of these models are known to adjust confidence, and the lens is rough. But the main point survives: the answer is not looked up anywhere. It is built, a little per block.
+I do not have a tidy explanation for that last part. The late layers of these models are known to adjust confidence, and the lens is rough. But the main point survives. The answer is not looked up anywhere. It is built, a little per block.
 
 ## Probabilities
 
-After the last block, the vector at the final position is compared against every row of the embedding table. GPT-2 uses the same table on the way out as on the way in. That gives 50,257 scores, called logits: any size, positive or negative. Softmax turns them into probabilities by exponentiating each score and dividing by the total.
+After the twelfth block there is one final vector at the last position. The model has to turn it into the thing we started with: a probability for every token.
+
+It does that by comparing the final vector with every row of the embedding table, the same table as on the way in. A token whose row points the same way as the final vector gets a high score. That gives 50,257 scores, one per token. These raw scores are called **logits**, and they can be any size, positive or negative.
+
+Scores are not probabilities yet. A formula called **softmax** converts them. It makes every score positive, then scales them so that together they add up to 100%. Here it is written out. Skip it if formulas are not your thing.
 
 $$
 p_i = \frac{e^{z_i / T}}{\sum_j e^{z_j / T}}
 $$
 
-The $T$ is temperature, and it is the main knob you get as a user. Dividing the scores by a number below 1 pushes them apart, so the favourite wins more often. A number above 1 squashes them together, and the long tail gets a real chance.
+The $T$ in there is the **temperature**, and it is the main dial you get as a user. It answers a question: should the pick be cautious or adventurous? A temperature below 1 pushes the scores apart, so the favourite wins more often. Above 1 squashes them together, and unlikely tokens get a real chance.
 
-The other common knob is top-p. Sort the tokens from most to least likely, keep the smallest group whose probabilities add up to p, and throw the rest away before picking.
+There is a second dial called **top-p**. Before picking, sort the tokens from most to least likely, keep just enough of them to add up to p, and throw the rest away. At 0.9, the least likely tenth is gone.
 
 <SamplerFig>
 
@@ -173,17 +223,19 @@ The other common knob is top-p. Sort the tokens from most to least likely, keep 
 
 Things to try:
 
-- **"Once upon a".** The model is 99% sure of <Tok t=" time" />, and temperature barely changes anything. The knobs only matter when the model is unsure.
+- **"Once upon a".** The model is 99% sure of <Tok t=" time" />, and temperature barely changes anything. The dials only matter when the model is unsure.
 - **The Eiffel sentence at temperature 1.** More than two thirds of the probability sits outside the top ten, and all 50,257 tokens can be picked. That is why the first figure wandered off to "Luxplier". Pull top-p down to 0.9 and only 722 tokens are left. The other 49,535 were sharing the last tenth of the probability between them. This is what the setting is for.
 - **Temperature near zero.** Always the favourite. Repeatable, and as the third run showed, prone to loops.
 
-Why softmax is written the way it is, and how it breaks when you code it naively, is in [the from-scratch note](/notes/gpt-from-scratch#softmax).
+Why softmax is written the way it is, and how it breaks if you code it carelessly, is in [the from-scratch note](/notes/gpt-from-scratch#softmax).
 
 ## Training
 
-Everything so far describes a model that already works. All 124 million numbers in it, the embedding tables, every attention head, every MLP, start out random. Training is how they get their values, and the idea is simple.
+Everything so far describes a model that already works. But where did its numbers come from?
 
-Take a real sentence. At every position, ask the model for its probabilities, and look up the probability it gave to the token that actually came next. High is good. Low means the model was surprised. The amount of surprise, −ln(p), is called the loss.
+GPT-2 has 124 million of them: the embedding tables, every attention head, every MLP. They are called **parameters** or **weights**, and at the start every one of them is random.
+
+Training is how they get their values, and the idea fits in a paragraph. Take a real sentence that a person wrote. Cover up what comes next and ask the model for its probabilities. Then uncover it and look at how much probability the model gave to the token that was really there. If it gave a lot, good. If it gave very little, the model was surprised, and the amount of surprise is called the **loss**.
 
 <SurprisalFig>
 
@@ -193,9 +245,11 @@ Take a real sentence. At every position, ask the model for its probabilities, an
 
 Read it left to right. <Tok t=" E" /> was a surprise, because almost anything can follow <Tok t="The" />. <Tok t="el" /> was not: after <Tok t=" E" /> and <Tok t="iff" /> it could hardly be anything else. And <Tok t=" Paris" /> gets its 6.9%, exactly as in the first figure.
 
-Then comes the part that makes it learning. Calculus tells you, for every one of the 124 million numbers, which way to nudge it to make that loss a little smaller. Nudge them all. Repeat on billions of sentences. Nothing else is going on: no rules, no grammar, no table of facts. Whatever the model knows is whatever turned out to be useful for making the next token less surprising.
+Then comes the part that makes it learning. A piece of calculus can tell you, for every single one of the 124 million numbers, which way to nudge it so that the surprise would have been slightly smaller. Nudge them all, a tiny amount. Then do it again with another sentence, and another, billions of times.
 
-A chat model has one more stage. After this pretraining it is trained further on conversations and on human feedback, so that the most likely continuation of a question is a helpful answer.
+That is the whole method. There are no grammar rules in there and no table of facts. Whatever the model knows is whatever turned out to help it be less surprised by the next token.
+
+A chat model has one more stage. After this first round of training it is trained further on conversations and on human feedback, so that the most likely continuation of a question is a helpful answer.
 
 ## What this explains
 
@@ -203,15 +257,36 @@ Once the loop is clear, a lot of everyday behaviour stops being mysterious.
 
 **Hallucination.** The model produces what is likely. For most questions, likely and true line up, which is why any of this works. When they come apart, nothing in the loop notices.
 
-**No memory.** The function takes tokens and returns probabilities. It keeps nothing between calls. A chat "remembers" because the app sends the whole conversation back in, every time.
+**No memory.** The model takes tokens and returns probabilities. It keeps nothing between calls. A chat "remembers" because the app sends the whole conversation back in, every single time.
 
-**The context window.** The list has a maximum length: 1,024 tokens for GPT-2, hundreds of thousands for current models. Everything the model knows about your situation has to fit inside it. The system prompt, your documents, tool results and the conversation so far are all just tokens in the list.
+**The context window.** The list of tokens has a maximum length: 1,024 for GPT-2, hundreds of thousands for current models. Everything the model knows about your situation has to fit inside it. The system prompt, your documents, tool results and the conversation so far are all just tokens in that list.
 
-**Output is slow and costs more.** The model reads all the input tokens in one pass. Output tokens come out one pass each. That is why answers stream, and why APIs charge more for output than for input.
+**Output is slow and costs more.** The model reads all the input tokens in one pass. Output tokens need one pass each. That is why answers stream out word by word, and why APIs charge more for output than for input.
 
-**Same prompt, different answer.** Picking is random on purpose. The dice are part of the design.
+**Same prompt, different answer.** The pick is random on purpose. The dice are part of the design.
 
-**Tool calls.** The model writes text in a format your code agreed to parse. The model never runs anything. Your code does, and then puts the result back into the list.
+**Tool calls.** The model writes text in a format your code agreed to understand. The model never runs anything. Your code does, and then puts the result back into the list.
+
+That fourth point, reading in one pass and writing one token at a time, is where a whole engineering field starts. It is the subject of [the inference series](/inference-engineering).
+
+## The words, in one place
+
+- **Token.** A piece of text, usually a word or part of one. Models read and write tokens.
+- **Vocabulary.** The fixed list of every token a model knows. GPT-2 has 50,257.
+- **Vector.** A list of numbers.
+- **Embedding.** The vector that stands for a token inside the model.
+- **Parameters, or weights.** The numbers inside the model that training adjusts. GPT-2 small has 124 million.
+- **Block.** One round of attention followed by an MLP. GPT-2 small stacks 12.
+- **Attention.** The step where each token looks back at earlier tokens and pulls in what it needs.
+- **Attention head.** One of several readers working side by side inside a block, each with its own habit.
+- **MLP.** A small network that works on one token's vector at a time.
+- **Logits.** The raw scores, one per token, before they become probabilities.
+- **Softmax.** The formula that turns scores into probabilities that add up to 100%.
+- **Sampling.** Picking the next token at random, weighted by the probabilities.
+- **Temperature.** The dial that makes sampling more cautious or more adventurous.
+- **Top-p.** A cut-off that removes the unlikely tail before picking.
+- **Loss.** How surprised the model was by the right answer. Training makes it smaller.
+- **Context window.** The most tokens a model can take in at once.
 
 ## The numbers on this page
 

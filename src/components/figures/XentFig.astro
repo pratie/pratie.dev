@@ -12,10 +12,10 @@ const share = [0, 0.5, 0.3, 0.2];
 // plot area for the curve, in viewBox units
 const W = 320;
 const H = 190;
-const L = 34;
-const R = 10;
-const T = 10;
-const B = 30;
+const L = 30;
+const R = 14;
+const T = 12;
+const B = 34;
 const MAX_LOSS = 5;
 const px = (p: number) => L + p * (W - L - R);
 const py = (loss: number) => T + (1 - Math.min(loss, MAX_LOSS) / MAX_LOSS) * (H - T - B);
@@ -48,7 +48,7 @@ const curve = Array.from({ length: 200 }, (_, i) => {
           }
           {
             [0, 0.25, 0.5, 0.75, 1].map((p) => (
-              <text class="tick" x={px(p)} y={H - 10} text-anchor="middle">
+              <text class="tick" x={px(p)} y={H - 9} text-anchor="middle">
                 {p}
               </text>
             ))
@@ -115,7 +115,7 @@ const curve = Array.from({ length: 200 }, (_, i) => {
     display: block;
     width: 100%;
     height: auto;
-    font-size: 11px;
+    font-size: 14px;
     overflow: visible;
   }
 

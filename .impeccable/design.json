@@ -543,6 +543,21 @@
           "#e0cab3",
           "#fdebd9"
         ]
+      },
+      "mark-ground": {
+        "role": "secondary",
+        "displayName": "Highlighter Ground",
+        "canonical": "oklch(92.0% 0.148 98)",
+        "tonalRamp": [
+          "#0f0b00",
+          "#2e2600",
+          "#514500",
+          "#736300",
+          "#9b8604",
+          "#c2ab37",
+          "#e1cf75",
+          "#fef0ac"
+        ]
       }
     },
     "typographyMeta": {

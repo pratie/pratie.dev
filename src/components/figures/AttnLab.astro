@@ -176,7 +176,7 @@ const reader = 2;
   .col {
     padding: 0.15rem 0;
     border: 0;
-    border-radius: 5px;
+    border-radius: 6px;
     background: transparent;
     color: inherit;
     font: inherit;
@@ -223,17 +223,20 @@ const reader = 2;
       grid-template-columns: 3.7rem repeat(5, minmax(0, 1fr));
     }
 
+    /* five columns of about 40px: the header tokens drop their chip to fit */
     .col :global(.tok) {
-      padding-inline: 0.1em;
-      font-size: 0.6875rem;
+      padding-inline: 0;
+      font-size: 0.75rem;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .col[aria-pressed='true'] :global(.tok) {
+      box-shadow: 0 2px 0 var(--pen);
     }
 
     .cell {
       font-size: 0.75rem;
-    }
-
-    .dim {
-      font-size: 0.6875rem;
     }
   }
 

@@ -14,6 +14,7 @@
   --mark: #ffe566; /* highlighter */
   --mark-wash: #fff3b0;
   --mark-ground: #ffe566; /* the strongest highlight that still carries body text */
+  --on-mark: #1f1e1b; /* ink on full-strength highlighter, the same in both themes */
   --warn: #b0370f; /* red pencil: negatives, things that go wrong */
   --warn-wash: #fbe3d9;
   --heat-max: 55%;
@@ -120,7 +121,7 @@ body {
 
 ::selection {
   background: var(--mark);
-  color: #1f1e1b;
+  color: var(--on-mark);
 }
 
 :focus-visible {

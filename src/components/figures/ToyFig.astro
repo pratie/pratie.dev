@@ -14,7 +14,7 @@ import { TOKENS, DIMS, X } from '../../lib/toy';
         TOKENS.map((t, i) => (
           <>
             <span class="head">{t}</span>
-            <span class="row">
+            <span class="vals">
               <Cells values={X[i]} digits={1} />
             </span>
           </>
@@ -34,7 +34,7 @@ import { TOKENS, DIMS, X } from '../../lib/toy';
     max-width: 22rem;
   }
 
-  .row {
+  .vals {
     grid-column: 2 / 6;
   }
 

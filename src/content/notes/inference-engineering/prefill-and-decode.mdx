@@ -211,9 +211,9 @@ That growth is where a lot of research goes. Three ideas from the book are worth
 
 - **FlashAttention** computes exactly the same attention, arranged so that intermediate results never leave the chip's fast on-board memory. Same answer, fewer trips to the pantry.
 - **PagedAttention** stores what attention needs to remember in small fixed-size blocks, so memory can be handed out and reclaimed without leaving unusable gaps.
-- Cheaper kinds of attention change the maths itself. Sliding window attention only looks back a fixed distance, often several thousand tokens. Others squeeze the older part of the text into a summary, or swap the exact calculation for an approximation. They give up a little quality, and they have to be built in when the model is trained.
+- Cheaper kinds of attention change the maths itself. Sliding window attention only looks back a fixed distance, which the book puts at 8,000 to 32,000 tokens in practice. Others compress the older part of the text, or swap the exact calculation for an approximation. They give up a little quality, and they have to be built in when the model is trained.
 
-A few models go a step further and replace attention in some of their layers with a different mechanism, one whose cost grows in a straight line with the length of the text. The book mentions Mamba as the best known, and says mixtures of the two kinds of layer are becoming more common.
+A few models go a step further and replace attention in some of their layers with a different mechanism, one whose cost grows in a straight line with the length of the text. The book's example is a design called Mamba, and it says models that mix the two kinds of layer are becoming more common.
 
 What attention needs to remember is called the KV cache, and it gets [a chapter of its own](/inference-engineering/kv-cache).
 

@@ -11,7 +11,8 @@ Read these before changing anything:
 ## Commands
 
 - `npm run dev` (or `npx astro dev --background`), `npm run build`, `npm run preview`
-- `npm run build && node scripts/smoke.mjs` checks every internal link and anchor, then runs every
+- `npm test` (the same as `npm run build && node scripts/smoke.mjs`) checks every internal link and
+  anchor, checks that a link saying "chapter 7" points at the seventh chapter, then runs every
   figure's script in jsdom and operates its controls. Run it before every push.
 - The owner checks the site in a browser themselves. Do not drive a browser to test it.
 - Model data and measurements need a Python env, kept outside the site build:
@@ -20,7 +21,9 @@ Read these before changing anything:
   - `python scripts/gpt2_figures.py` writes `src/data/gpt2/*.json` (the basics note)
   - `python scripts/gpt_numpy.py` checks the NumPy GPT against GPT-2 (the from-scratch note)
   - `python scripts/inference_bench.py [part ...]` writes `src/data/bench/*.json` (the inference series).
-    Timings are noisy when the laptop is busy. Run it with other programs closed.
+    Timings are noisy when the laptop is busy. Run it with other programs closed. The parts `compute`
+    and `templates` skip loading GPT-2 when asked for by themselves; `templates` fetches the
+    tokenizers of two open models from Hugging Face to render their chat templates.
 
 ## Where things live
 
@@ -47,13 +50,26 @@ Only `##` headings appear in the rail. Keep them short. Other notes link to them
 `/notes/<slug>#<heading-id>`, so do not rename a heading without searching for links to it.
 `scripts/smoke.mjs` will catch a broken one.
 
+Inserting or moving a chapter changes the number of every chapter after it. Update each `chapter:`
+value and every "chapter N" in the prose. The smoke test catches a link whose text names the wrong
+number. It cannot catch a number written in plain text ("the bars from chapter 6"), so search for those.
+
+The inference series ends with two reference pages, `glossary.mdx` and `further-reading.mdx`. A term
+a chapter defines gets a line in the glossary, under that chapter's heading. A source a chapter leans
+on gets a line in the reading list, and only after its link has been checked with `curl`.
+
+When a book becomes a series, check the finished chapters against the book's table of contents,
+section by section, before calling it done. The first pass of this series missed half a chapter.
+
 ## Rules for notes
 
 - Voice: `WRITING.md`. Start from the question or the problem, build the intuition with a small
   example, then name the thing and explain how it works. Define every term on first use.
   First person, plain words, no invented experiences, no em dashes.
 - Never copy a source's wording, examples, figures or tables. Write the idea in your own words with
-  your own example, credit the source, and point to where it goes deeper. Never commit a copy of a
+  your own example, credit the source, and point to where it goes deeper. A table rebuilt with the
+  same rows, columns and cell values in different words is still a copy: write the comparison as
+  prose, or organise it around a different question than the source does. Never commit a copy of a
   copyrighted book or paper to this repo; link to the publisher's page instead.
 - A figure says in its caption whether its numbers are measured, from a real model, or made up.
   Measured and model numbers come from the scripts above into `src/data/`. Do not hand-edit the JSON.
@@ -74,6 +90,8 @@ notes read as one system.
 - A vector or matrix is a row of number cells (`Cells.astro`, `.cell`): blue for positive, red for
   negative, hatched for masked or switched off.
 - A stack of layers is `LayersFig.astro`. A left-to-right flow is `Pipeline.astro`.
+- Text exactly as a model receives it is `TemplateFig.astro`: mono type, line breaks shown, and
+  whatever the software added marked in yellow.
 - Yellow highlighter means attention, a cache hit, or "newly added". Pen blue means the thing in
   focus. Red pencil means something going wrong.
 - Interactive figures are custom elements (`fig-*`) defined in the component's `<script>`.

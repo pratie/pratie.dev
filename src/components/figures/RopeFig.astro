@@ -1,0 +1,223 @@
+---
+// Rotary position on two pairs of numbers. Position turns each arrow, and only the gap survives.
+import Figure from './Figure.astro';
+import { num } from '../../lib/fig';
+import { SPEEDS, turn, tip, pairScore, apart, summary } from '../../lib/rope';
+
+const gap = 3;
+const start = 5;
+const R = 40;
+const uid = crypto.randomUUID().slice(0, 8);
+/** where an arrow's tip lands on the dial; the y axis of a drawing points down */
+const point = (position: number, degrees: number) => {
+  const [x, y] = tip(turn(position, degrees));
+  return { x: (x * R).toFixed(2), y: (-y * R).toFixed(2) };
+};
+---
+
+<Figure interactive>
+  <fig-rope data-speeds={JSON.stringify(SPEEDS)} data-r={R}>
+    <div class="knobs">
+      <div class="slider">
+        <label for={`${uid}-gap`}>How far apart</label>
+        <input type="range" id={`${uid}-gap`} min="0" max="24" step="1" value={gap} data-gap />
+        <output for={`${uid}-gap`}>{gap} tokens</output>
+      </div>
+      <div class="slider">
+        <label for={`${uid}-start`}>Where in the text</label>
+        <input type="range" id={`${uid}-start`} min="0" max="60" step="1" value={start} data-start />
+        <output for={`${uid}-start`}>token {start}</output>
+      </div>
+    </div>
+
+    <div class="dials">
+      {
+        SPEEDS.map((speed, i) => {
+          const key = point(start, speed.degrees);
+          const query = point(start + gap, speed.degrees);
+          return (
+            <div class="sheet" data-dial={i}>
+              <p class="fig-label">
+                {speed.name}: {speed.degrees}° for each position
+              </p>
+              <svg viewBox="-50 -50 100 100" role="img" aria-label={`${speed.name}. The two arrows are described below.`}>
+                <circle class="ring" r="44" />
+                <line class="arrow key" x1="0" y1="0" x2={key.x} y2={key.y} data-key />
+                <circle class="end key" r="3.5" cx={key.x} cy={key.y} data-key-end />
+                <line class="arrow query" x1="0" y1="0" x2={query.x} y2={query.y} data-query />
+                <circle class="end query" r="3.5" cx={query.x} cy={query.y} data-query-end />
+              </svg>
+              <p class="fig-label read" data-read>
+                {apart(gap, speed.degrees)}. Score {num(pairScore(start, start + gap, speed.degrees), 2)}.
+              </p>
+            </div>
+          );
+        })
+      }
+    </div>
+
+    <ul class="key-list">
+      <li><span class="swatch key"></span> the token being read (its key)</li>
+      <li><span class="swatch query"></span> the token doing the reading (its query)</li>
+    </ul>
+
+    <p class="says" data-says aria-live="polite">{summary(gap, start)}</p>
+  </fig-rope>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-rope {
+    display: block;
+  }
+
+  fig-rope > * + * {
+    margin-top: 1rem;
+  }
+
+  .knobs {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .slider {
+    grid-template-columns: minmax(6.5rem, 10rem) minmax(4rem, 1fr) minmax(4.75rem, auto);
+  }
+
+  .slider output {
+    white-space: nowrap;
+  }
+
+  .dials {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    max-width: 9.5rem;
+    height: auto;
+    margin: 0.6rem auto 0.5rem;
+  }
+
+  .ring {
+    fill: none;
+    stroke: var(--rule);
+    stroke-width: 1;
+  }
+
+  .arrow {
+    stroke-width: 2.5;
+    stroke-linecap: round;
+  }
+
+  .arrow.key {
+    stroke: var(--ink);
+  }
+
+  .end.key {
+    fill: var(--ink);
+  }
+
+  .arrow.query {
+    stroke: var(--pen);
+  }
+
+  .end.query {
+    fill: var(--pen);
+  }
+
+  .read {
+    text-align: center;
+  }
+
+  .key-list {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1.2rem;
+    margin-bottom: 0;
+    padding: 0;
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+
+  .key-list li {
+    margin: 0;
+  }
+
+  .swatch {
+    display: inline-block;
+    width: 1.1rem;
+    height: 0.2rem;
+    margin-right: 0.3rem;
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+
+  .swatch.key {
+    background: var(--ink);
+  }
+
+  .swatch.query {
+    background: var(--pen);
+  }
+
+  .says {
+    margin-bottom: 0;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--rule);
+  }
+</style>
+
+<script>
+  import { num } from '../../lib/fig';
+  import { turn, tip, pairScore, apart, summary } from '../../lib/rope';
+
+  class FigRope extends HTMLElement {
+    speeds: { name: string; degrees: number }[] = [];
+    r = 40;
+
+    connectedCallback() {
+      this.speeds = JSON.parse(this.dataset.speeds ?? '[]');
+      this.r = Number(this.dataset.r ?? 40);
+      this.querySelectorAll('input').forEach((input) => input.addEventListener('input', () => this.draw()));
+      this.draw();
+    }
+
+    place(dial: Element, name: string, position: number, degrees: number) {
+      const [x, y] = tip(turn(position, degrees));
+      const px = (x * this.r).toFixed(2);
+      const py = (-y * this.r).toFixed(2);
+      const line = dial.querySelector(`[data-${name}]`)!;
+      line.setAttribute('x2', px);
+      line.setAttribute('y2', py);
+      const end = dial.querySelector(`[data-${name}-end]`)!;
+      end.setAttribute('cx', px);
+      end.setAttribute('cy', py);
+    }
+
+    draw() {
+      const gapInput = this.querySelector<HTMLInputElement>('[data-gap]')!;
+      const startInput = this.querySelector<HTMLInputElement>('[data-start]')!;
+      const gap = Number(gapInput.value);
+      const start = Number(startInput.value);
+      gapInput.parentElement!.querySelector('output')!.textContent = `${gap} token${gap === 1 ? '' : 's'}`;
+      startInput.parentElement!.querySelector('output')!.textContent = `token ${start}`;
+
+      this.querySelectorAll('[data-dial]').forEach((dial, i) => {
+        const { degrees } = this.speeds[i];
+        const score = pairScore(start, start + gap, degrees);
+        this.place(dial, 'key', start, degrees);
+        this.place(dial, 'query', start + gap, degrees);
+        dial.querySelector('[data-read]')!.textContent = `${apart(gap, degrees)}. Score ${num(score, 2)}.`;
+      });
+
+      this.querySelector('[data-says]')!.textContent = summary(gap, start);
+    }
+  }
+
+  customElements.define('fig-rope', FigRope);
+</script>

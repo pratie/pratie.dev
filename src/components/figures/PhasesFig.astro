@@ -1,0 +1,237 @@
+---
+// One request, pass by pass: the prompt is read in a single pass, the answer is written one token a pass.
+// The two costs of a pass are measured (scripts/inference_bench.py); the sentence is made up.
+import Figure from './Figure.astro';
+import Tok from './Tok.astro';
+import membw from '../../data/bench/membw.json';
+import ttft from '../../data/bench/ttft.json';
+import { doing, timings } from '../../lib/phases';
+
+// One word per token, to keep the picture simple.
+const PROMPT = ['You', ' are', ' a', ' helpful', ' assistant', '.', ' Answer', ' in', ' one', ' short', ' sentence', '.',
+  ' Why', ' is', ' the', ' sky', ' blue', ' when', ' the', ' sun', ' is', ' high', ' up', '?'];
+const ANSWER = [' Air', ' scatters', ' blue', ' light', ' from', ' the', ' sun', ' more', ' than', ' red', ',', ' so',
+  ' blue', ' reaches', ' you', '.'];
+
+const costs = {
+  // fetching every weight once, at the speed this laptop reads memory
+  fetchMs: (membw.weights_gb / membw.read_gbs) * 1000,
+  // what one more token in the prompt adds to the wait for the first token
+  calcMs: (ttft[1].ttft_ms - ttft[0].ttft_ms) / (ttft[1].prompt - ttft[0].prompt),
+};
+const prompt = 12;
+const answer = 8;
+const uid = crypto.randomUUID().slice(0, 8);
+const rows = ['Reading: fetching the weights', 'Reading: arithmetic', 'Writing: fetching the weights', 'Writing: arithmetic'];
+---
+
+<Figure interactive>
+  <fig-phases
+    data-prompt={JSON.stringify(PROMPT)}
+    data-reply={JSON.stringify(ANSWER)}
+    data-fetch={costs.fetchMs.toFixed(3)}
+    data-calc={costs.calcMs.toFixed(3)}
+  >
+    <div class="knobs">
+      <div class="slider">
+        <label for={`${uid}-n`}>Tokens in the prompt</label>
+        <input type="range" id={`${uid}-n`} min="4" max={PROMPT.length} step="1" value={prompt} data-n />
+        <output for={`${uid}-n`}>{prompt}</output>
+      </div>
+      <div class="slider">
+        <label for={`${uid}-a`}>Tokens in the answer</label>
+        <input type="range" id={`${uid}-a`} min="2" max={ANSWER.length} step="1" value={answer} data-a />
+        <output for={`${uid}-a`}>{answer}</output>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <p class="fig-label" data-doing aria-live="polite">{doing(prompt, answer, 0)}</p>
+      <div class="toks line" data-tokens>{PROMPT.slice(0, prompt).map((t) => <Tok t={t} />)}</div>
+      <ul class="key">
+        <li><span class="tok fresh">ab</span> went through the model in this pass</li>
+        <li><span class="tok saved">ab</span> worked out earlier and kept</li>
+      </ul>
+    </div>
+
+    <div class="sheet">
+      <p class="fig-label">Where the time has gone so far</p>
+      <div class="bars" data-bars>
+        {
+          rows.map((label) => (
+            <div class="bar-row wide">
+              <span class="name">{label}</span>
+              <span class="bar-track">
+                <span class="bar-fill" style="--p:0" />
+              </span>
+              <span class="val">0 ms</span>
+            </div>
+          ))
+        }
+      </div>
+      <p class="fig-label sum" data-sum>{timings(prompt, answer, 0, costs)}</p>
+    </div>
+
+    <div class="fig-controls">
+      <button class="btn primary" type="button" data-next>Run the next pass</button>
+      <button class="btn" type="button" data-all>Run them all</button>
+      <button class="btn" type="button" data-reset>Start over</button>
+    </div>
+  </fig-phases>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-phases {
+    display: block;
+  }
+
+  fig-phases > * + * {
+    margin-top: 1rem;
+  }
+
+  .knobs {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .slider {
+    grid-template-columns: minmax(6.5rem, 11rem) minmax(4rem, 1fr) minmax(2rem, auto);
+  }
+
+  .line {
+    margin-top: 0.6rem;
+    min-height: 2rem;
+  }
+
+  fig-phases :global(.tok) {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+
+  fig-phases :global(.tok.saved) {
+    background: var(--mark-wash);
+    box-shadow: inset 0 0 0 1px var(--mark);
+  }
+
+  fig-phases :global(.tok.fresh) {
+    background: var(--pen-wash);
+    box-shadow: inset 0 0 0 1px var(--pen);
+  }
+
+  fig-phases :global(.tok.just) {
+    font-weight: 700;
+  }
+
+  .key {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1.2rem;
+    margin: 0.9rem 0 0;
+    padding: 0.7rem 0 0;
+    border-top: 1px dashed var(--rule);
+    font-size: 0.75rem;
+    color: var(--ink-2);
+  }
+
+  .key li {
+    margin: 0;
+  }
+
+  .bars {
+    margin-top: 0.6rem;
+  }
+
+  .sum {
+    margin-top: 0.8rem;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--rule);
+  }
+</style>
+
+<script>
+  import { h, tok } from '../../lib/fig';
+  import { split, doing, timings } from '../../lib/phases';
+
+  const LABELS = ['Reading: fetching the weights', 'Reading: arithmetic', 'Writing: fetching the weights', 'Writing: arithmetic'];
+
+  class FigPhases extends HTMLElement {
+    promptWords: string[] = [];
+    answerWords: string[] = [];
+    costs = { fetchMs: 0, calcMs: 0 };
+    /** passes run so far; each one adds a token to the answer */
+    passes = 0;
+
+    connectedCallback() {
+      this.promptWords = JSON.parse(this.dataset.prompt ?? '[]');
+      this.answerWords = JSON.parse(this.dataset.reply ?? '[]');
+      this.costs = { fetchMs: Number(this.dataset.fetch), calcMs: Number(this.dataset.calc) };
+      this.querySelectorAll('input').forEach((input) =>
+        input.addEventListener('input', () => {
+          this.passes = 0;
+          this.draw();
+        }),
+      );
+      this.querySelector('[data-next]')!.addEventListener('click', () => {
+        if (this.passes < this.answer) this.passes++;
+        this.draw();
+      });
+      this.querySelector('[data-all]')!.addEventListener('click', () => {
+        this.passes = this.answer;
+        this.draw();
+      });
+      this.querySelector('[data-reset]')!.addEventListener('click', () => {
+        this.passes = 0;
+        this.draw();
+      });
+      this.draw();
+    }
+
+    get prompt() {
+      return Number(this.querySelector<HTMLInputElement>('[data-n]')!.value);
+    }
+
+    get answer() {
+      return Number(this.querySelector<HTMLInputElement>('[data-a]')!.value);
+    }
+
+    draw() {
+      const { prompt, answer, passes, costs } = this;
+      this.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
+        input.parentElement!.querySelector('output')!.textContent = input.value;
+      });
+
+      const sequence = [...this.promptWords.slice(0, prompt), ...this.answerWords.slice(0, passes)];
+      // what happened to each token in the pass that just ran
+      const state = (i: number) => {
+        if (passes === 0) return '';
+        if (i === sequence.length - 1) return 'just'; // the token this pass produced
+        if (passes === 1) return 'fresh'; // prefill: the whole prompt goes through
+        return i === sequence.length - 2 ? 'fresh' : 'saved'; // decode: only the newest earlier token
+      };
+      this.querySelector('[data-tokens]')!.replaceChildren(...sequence.map((text, i) => tok(text, state(i))));
+      this.querySelector('[data-doing]')!.textContent = doing(prompt, answer, passes);
+
+      const now = split(prompt, passes, costs);
+      const end = split(prompt, answer, costs);
+      const most = Math.max(end.readFetch, end.readCalc, end.writeFetch, end.writeCalc, 1);
+      const values = [now.readFetch, now.readCalc, now.writeFetch, now.writeCalc];
+      this.querySelector('[data-bars]')!.replaceChildren(
+        ...values.map((value, i) =>
+          h(
+            'div',
+            { class: i === 2 ? 'bar-row wide is-pen' : 'bar-row wide' },
+            h('span', { class: 'name' }, LABELS[i]),
+            h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', vars: { '--p': (value / most).toFixed(4) } })),
+            h('span', { class: 'val' }, `${Math.round(value)} ms`),
+          ),
+        ),
+      );
+      this.querySelector('[data-sum]')!.textContent = timings(prompt, answer, passes, costs);
+      (this.querySelector('[data-next]') as HTMLButtonElement).disabled = passes >= answer;
+    }
+  }
+
+  customElements.define('fig-phases', FigPhases);
+</script>

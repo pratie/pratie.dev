@@ -92,6 +92,12 @@ notes read as one system.
 - A stack of layers is `LayersFig.astro`. A left-to-right flow is `Pipeline.astro`.
 - Text exactly as a model receives it is `TemplateFig.astro`: mono type, line breaks shown, and
   whatever the software added marked in yellow.
+- `src/content/notes/basics-playground.mdx` gathers one toy for each basic idea (tokens, embeddings,
+  matrix multiplication, attention, position, sampling, prefill and decode, the KV cache). It reuses
+  figures from the other notes and adds `MatmulFig`, `RopeFig` and `PhasesFig`. A new basic idea gets
+  a toy there, three or four sentences, and a link to the note that explains it properly.
+- When the server and the browser both print a sentence, build it in one function in `src/lib/`
+  and call that from both, so the first paint and the first update cannot disagree.
 - Yellow highlighter means attention, a cache hit, or "newly added". Pen blue means the thing in
   focus. Red pencil means something going wrong.
 - Interactive figures are custom elements (`fig-*`) defined in the component's `<script>`.

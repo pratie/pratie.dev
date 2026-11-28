@@ -1,0 +1,171 @@
+---
+title: The basics, to play with
+short: Basics playground
+description: The eight ideas the rest of inference engineering stands on, each as something you can drag, press or step through.
+date: 2026-11-28
+order: 3
+related:
+  - how-llms-work
+  - gpt-from-scratch
+---
+
+import BpeFig from '../../components/figures/BpeFig.astro';
+import EmbedFig from '../../components/figures/EmbedFig.astro';
+import MatmulFig from '../../components/figures/MatmulFig.astro';
+import AttnLab from '../../components/figures/AttnLab.astro';
+import RopeFig from '../../components/figures/RopeFig.astro';
+import SamplerFig from '../../components/figures/SamplerFig.astro';
+import PhasesFig from '../../components/figures/PhasesFig.astro';
+import KvFig from '../../components/figures/KvFig.astro';
+import membw from '../../data/bench/membw.json';
+import ttft from '../../data/bench/ttft.json';
+import { count, GPT2 } from '../../lib/calcs';
+
+export const fetchMs = (membw.weights_gb / membw.read_gbs) * 1000;
+export const calcMs = (ttft[1].ttft_ms - ttft[0].ttft_ms) / (ttft[1].prompt - ttft[0].prompt);
+
+Every plan for learning inference engineering starts with the same short list. Tokens. Embeddings. Matrix multiplication. Attention. Position. Sampling. Prefill and decode. The KV cache.
+
+I learn these better when I can move something and watch what changes. So this page is one toy for each idea, in the order they build on each other, with a few lines on what to look for and why someone who serves models has to care.
+
+It is a workbench, not an explanation. Each section says where the full explanation lives.
+
+## Tokens
+
+A model cannot read letters. Text is cut into pieces called **tokens**, and each piece is swapped for a number. How does it decide where to cut? It starts from single characters and keeps gluing together whichever pair turns up most often.
+
+<BpeFig>
+
+**Byte-pair encoding, trained in your browser on the text of this page.** Drag the slider to zero to see raw bytes, then replay the merges. Type a word the page never uses and it stays in pieces.
+
+</BpeFig>
+
+**Why it matters for serving.** Everything is counted in tokens. Speed is tokens per second, the price is per token, and the limit on a request is a number of tokens.
+
+Goes deeper: [tokens, in the basics note](/notes/how-llms-work#tokens).
+
+## Embeddings
+
+A token's number is only a name. Before the model can do anything with it, the number is swapped for a list of numbers, called a vector, that says something about what the token means. Tokens that are used in similar ways end up with similar vectors.
+
+<EmbedFig>
+
+**51 rows of GPT-2's real embedding table**, squashed from 768 numbers each down to two so they can be drawn. Pick a word to see its nearest neighbours among all the tokens the model knows.
+
+</EmbedFig>
+
+**Why it matters for serving.** That table is part of the weights you have to load. In GPT-2 it is almost a third of the model.
+
+Goes deeper: [embeddings, in the basics note](/notes/how-llms-work#embeddings).
+
+## Matrix multiplication
+
+What does a model do with those vectors? Almost always the same thing. It takes a vector and makes a new one, in which every number is a weighted sum of all the old ones. The weights sit in a grid called a matrix, and the operation is **matrix multiplication**.
+
+<MatmulFig>
+
+**A layer small enough to check by hand.** The weights are made up. Move an input and watch which outputs change, then press an output to see how it was worked out.
+
+</MatmulFig>
+
+One thing to try. Set two of the inputs to zero. Every output is now a single weight times the input that is left.
+
+**Why it matters for serving.** Count the work. Every weight is used in one multiplication, and all but a few in one addition. This grid has 9 weights. GPT-2's largest has {count(4 * GPT2.width * GPT2.width)}, and there are {4 * GPT2.layers} grids in its {GPT2.layers} blocks. So the cost of running a model is, near enough, two operations for every weight, for every token. [Chapter 5](/inference-engineering/prefill-and-decode#where-do-the-two-limits-meet) builds its whole argument on that count.
+
+Goes deeper: [what is inside the model](/inference-engineering/one-request#what-is-inside-the-model), and [the MLP built in code](/notes/gpt-from-scratch#the-mlp).
+
+## Attention
+
+A matrix multiplication works on one token's vector at a time. So how does a token find out about the words around it?
+
+Through **attention**. Each token asks a question, called its query. Every earlier token offers a label, called its key, and some content, called its value. The token scores its query against every key, and takes in a blend of the values, weighted by those scores.
+
+<AttnLab>
+
+**Attention on five tokens, built up in three steps.** The vectors and matrices are made up and small enough to follow. Press the three buttons in order, and change who is doing the reading.
+
+</AttnLab>
+
+**Why it matters for serving.** Attention is the one part of a model whose cost grows with the length of the text. And the keys and values are exactly what the last toy on this page stores.
+
+Goes deeper: [attention, step by step](/notes/gpt-from-scratch#attention).
+
+## Position
+
+Attention has a blind spot. Scoring a query against a key says how well two tokens match. It says nothing about where they are. "Dog bites man" and "man bites dog" would look the same. So how does a model know the order?
+
+GPT-2's answer was one more table: a learned vector for each position, added to the token's vector at the very start. Most open models today do something neater, called rotary position embedding, or **RoPE**.
+
+The idea takes one picture. Split a key into pairs of numbers. A pair of numbers is an arrow. Before any scoring, turn each arrow by an angle that depends on the token's position, and do the same to the query.
+
+Why would that help? The score between two arrows depends on the angle between them. Turn both by the same amount and that angle does not change. So the score ends up depending on how far apart two tokens are, and not on where in the text they happen to sit.
+
+<RopeFig>
+
+**Two of the pairs from one key and one query.** A toy: both arrows start out pointing the same way, so position is the only thing changing the score. A real model has dozens of pairs in every attention head, each turning at its own speed.
+
+</RopeFig>
+
+Two things to try.
+
+- Slide "Where in the text". Both arrows turn together and the scores do not move.
+- Slide "How far apart" to 9. The fast pair has gone all the way round and scores a perfect 1.00, as if the two tokens were in the same place. The slow pair is not fooled. That is why there are many speeds. It is the hands of a clock: the minute hand is precise and repeats every hour, and the hour hand tells you which hour.
+
+**Why it matters for serving.** Nothing is stored for each position, so there is no table to run out of. GPT-2's position table has {count(GPT2.context)} rows, and that is its hard limit. And in the usual implementations a key is turned before it goes into the cache, so a stored key belongs to one position in the text.
+
+Goes deeper: the paper that introduced it, ["RoFormer: Enhanced Transformer with Rotary Position Embedding"](https://arxiv.org/abs/2104.09864), by Su and others, 2021.
+
+## Picking a token
+
+At the top of the model, the last vector is turned into a score for every token in the vocabulary. The scores become probabilities and one token is drawn. Two dials bend that draw.
+
+<SamplerFig>
+
+**Real GPT-2 scores for three different contexts.** The last bar is every token outside the top ten, added together. The sliders only change how a token is picked. The model's scores stay the same.
+
+</SamplerFig>
+
+**Why it matters for serving.** This step runs once for every token written. And how random the draw is decides how well a server can guess ahead, which is [a technique of its own](/inference-engineering/speculative-decoding).
+
+Goes deeper: [probabilities, in the basics note](/notes/how-llms-work#probabilities), and [picking each token](/inference-engineering/one-request#picking-each-token).
+
+## Prefill and decode
+
+Now put the pieces together into one request. The model has two jobs: read the prompt, then write the answer. It reads the whole prompt in a single pass. It writes one token per pass. The two jobs are called **prefill** and **decode**, and most of inference engineering follows from how different they are.
+
+The difference shows when you ask what one pass costs. A pass has two parts. All the weights have to be fetched from memory, and that costs the same however many tokens are in the pass. Then comes the arithmetic, which costs a little for every token.
+
+<PhasesFig>
+
+**A made-up sentence, timed with real costs.** Fetching GPT-2's weights once takes my laptop about {count(fetchMs)} ms, and the arithmetic for one token takes about {count(calcMs)} ms. Both come from measurements: the first from how fast the laptop reads memory, the second from how much longer a longer prompt takes. The toy assumes a pass is exactly those two parts, which is close to what the laptop does and not the whole story.
+
+</PhasesFig>
+
+Two things to try.
+
+- Run the passes one at a time and watch the bars. After the first pass, almost everything that gets added is fetching.
+- Make the prompt twice as long. The first token arrives a little later. Now make the answer twice as long. The total nearly doubles.
+
+**Why it matters for serving.** This is why the first token takes longer than the ones after it. It is why output tokens cost more than input tokens. And it is why running many requests through the model in the same pass works so well: they share the fetch.
+
+Goes deeper: [chapter 5](/inference-engineering/prefill-and-decode), where the same thing is measured and not modelled.
+
+## The KV cache
+
+In the last toy, each decode pass pushed a single token through the model. That is not automatic. It works because the model keeps the key and the value of every earlier token, so they never have to be worked out twice. Switch the cache off to see what writing would cost without it.
+
+<KvFig>
+
+**What goes through the model for each new token.** A sketch with a made-up sentence. Step through it both ways and watch the two totals drift apart.
+
+</KvFig>
+
+**Why it matters for serving.** The cache is what makes decode affordable, and it is paid for in memory. On a busy server it is often bigger than the model.
+
+Goes deeper: [chapter 10](/inference-engineering/kv-cache).
+
+## What comes next
+
+If all eight feel familiar, you have what the [Inference Engineering series](/inference-engineering) assumes. It picks up exactly here: what a server does with one request, why reading and writing hit different limits, and what can be done about each.
+
+If some of them still feel shaky, the two notes go slower. [How an LLM works](/notes/how-llms-work) follows one sentence through a real model, and [A GPT from scratch](/notes/gpt-from-scratch) rebuilds that model in about forty lines of code.

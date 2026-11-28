@@ -1,0 +1,181 @@
+---
+// A linear layer on three numbers: every output is a weighted sum of all the inputs.
+import Figure from './Figure.astro';
+import { num } from '../../lib/fig';
+import { matVec, working } from '../../lib/matmul';
+
+// One row of weights for each output. Made up, and small enough to check by hand.
+const W = [
+  [0.5, -1, 2],
+  [1.5, 0.5, -0.5],
+  [-1, 2, 1],
+];
+const x = [1, -0.5, 2];
+const y = matVec(W, x);
+const uid = crypto.randomUUID().slice(0, 8);
+const heat = (v: number, max: number) => Math.min(1, Math.abs(v) / max).toFixed(3);
+---
+
+<Figure interactive>
+  <fig-matmul data-w={JSON.stringify(W)}>
+    <div class="knobs">
+      {
+        x.map((v, i) => (
+          <div class="slider">
+            <label for={`${uid}-x${i}`}>Input {i + 1}</label>
+            <input type="range" id={`${uid}-x${i}`} min="-2" max="2" step="0.5" value={v} data-in={i} />
+            <output for={`${uid}-x${i}`}>{num(v, 1)}</output>
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="sheet">
+      <p class="fig-label">In: one vector of 3 numbers</p>
+      <div class="vec" data-x>
+        {x.map((v) => <span class:list={['cell', { neg: v < 0 }]} style={`--heat:${heat(v, 2)}`}>{num(v, 1)}</span>)}
+      </div>
+
+      <p class="fig-label">The layer: a row of 3 weights for each output</p>
+      <div class="grid">
+        {
+          W.map((row, r) => (
+            <div class:list={['vec', { on: r === 0 }]} data-row={r}>
+              {row.map((v) => <span class:list={['cell', { neg: v < 0 }]} style={`--heat:${heat(v, 2)}`}>{num(v, 1)}</span>)}
+            </div>
+          ))
+        }
+      </div>
+
+      <p class="fig-label">Out: 3 new numbers</p>
+      <div class="vec" data-y>
+        {
+          y.map((v, r) => (
+            <span class:list={['cell', { neg: v < 0, on: r === 0 }]} style={`--heat:${heat(v, 4)}`}>
+              {num(v, 2)}
+            </span>
+          ))
+        }
+      </div>
+
+      <p class="working" data-working aria-live="polite">{working(W, x, 0)}</p>
+    </div>
+
+    <div class="fig-controls" role="group" aria-label="Show the working for">
+      {
+        W.map((_, r) => (
+          <button class="btn" type="button" data-pick={r} aria-pressed={r === 0 ? 'true' : 'false'}>
+            Output {r + 1}
+          </button>
+        ))
+      }
+    </div>
+  </fig-matmul>
+  <Fragment slot="caption"><slot /></Fragment>
+</Figure>
+
+<style>
+  fig-matmul {
+    display: block;
+  }
+
+  fig-matmul > * + * {
+    margin-top: 1rem;
+  }
+
+  .knobs {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .slider {
+    grid-template-columns: minmax(4.5rem, 8rem) minmax(4rem, 1fr) minmax(2.75rem, auto);
+  }
+
+  .sheet .fig-label:not(:first-child) {
+    margin-top: 0.9rem;
+  }
+
+  .vec {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 4.5rem));
+    gap: 2px;
+    margin-top: 0.4rem;
+  }
+
+  .grid {
+    display: grid;
+    gap: 2px;
+    margin-top: 0.4rem;
+  }
+
+  .grid .vec {
+    margin-top: 0;
+  }
+
+  fig-matmul :global(.cell) {
+    box-shadow: inset 0 0 0 1px var(--rule);
+    font-size: 0.8125rem;
+  }
+
+  fig-matmul :global(.vec.on .cell),
+  fig-matmul :global(.cell.on) {
+    box-shadow: inset 0 0 0 2px var(--pen);
+  }
+
+  .working {
+    margin: 0.9rem 0 0;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+  }
+</style>
+
+<script>
+  import { h, num } from '../../lib/fig';
+  import { matVec, working } from '../../lib/matmul';
+
+  class FigMatmul extends HTMLElement {
+    W: number[][] = [];
+    /** which output has its working written out */
+    pick = 0;
+
+    connectedCallback() {
+      this.W = JSON.parse(this.dataset.w ?? '[]');
+      this.querySelectorAll<HTMLInputElement>('[data-in]').forEach((input) => input.addEventListener('input', () => this.draw()));
+      this.querySelectorAll<HTMLButtonElement>('[data-pick]').forEach((button) =>
+        button.addEventListener('click', () => {
+          this.pick = Number(button.dataset.pick);
+          this.draw();
+        }),
+      );
+      this.draw();
+    }
+
+    cell(v: number, max: number, digits: number, on = false) {
+      const cls = ['cell', v < 0 && 'neg', on && 'on'].filter(Boolean).join(' ');
+      return h('span', { class: cls, vars: { '--heat': Math.min(1, Math.abs(v) / max).toFixed(3) } }, num(v, digits));
+    }
+
+    draw() {
+      const inputs = [...this.querySelectorAll<HTMLInputElement>('[data-in]')];
+      const x = inputs.map((input) => Number(input.value));
+      inputs.forEach((input, i) => {
+        input.parentElement!.querySelector('output')!.textContent = num(x[i], 1);
+      });
+      const y = matVec(this.W, x);
+
+      this.querySelector('[data-x]')!.replaceChildren(...x.map((v) => this.cell(v, 2, 1)));
+      this.querySelectorAll<HTMLElement>('[data-row]').forEach((row) => row.classList.toggle('on', Number(row.dataset.row) === this.pick));
+      this.querySelector('[data-y]')!.replaceChildren(...y.map((v, r) => this.cell(v, 4, 2, r === this.pick)));
+      this.querySelector('[data-working]')!.textContent = working(this.W, x, this.pick);
+      this.querySelectorAll<HTMLButtonElement>('[data-pick]').forEach((button) =>
+        button.setAttribute('aria-pressed', String(Number(button.dataset.pick) === this.pick)),
+      );
+    }
+  }
+
+  customElements.define('fig-matmul', FigMatmul);
+</script>
